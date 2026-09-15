@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+import '../constants/theme_constants.dart';
+import '../models/mds_models.dart';
+import '../widgets/app_header.dart';
+import '../widgets/bottom_nav_bar.dart';
+import '../widgets/custom_primary_button.dart';
+import '../widgets/data_row_item.dart';
+import 'cow_profile_screen.dart';
+
+/// Screen 2: Dashboard / My Cows List Screen
+///
+/// Specifications:
+/// - Layout: White card layout with the AppHeader ("Dashboard").
+/// - Content: Title "My cows" (H1: 24px, Font Weight 600, Color #215433).
+///   A ListView.builder generating DataRowItem widgets. Include separators
+///   (thin grey line Divider) between rows.
+/// - Actions: A CustomPrimaryButton ("+ Add cow") placed below the list.
+/// - Footer: Insert the BottomNavBar with "Dash" in the active state.
+/// - Dashboard Routing: Tapping any DataRowItem inside the "My cows" list transitions
+///   to Screen 3 (Cow Profile) passing the selected Tag ID as an argument.
+class DashboardScreen extends StatefulWidget {
+  final List<Cow>? initialCows;
+  final ValueChanged<int>? onTabSelected;
+  final bool showBottomNav;
+
+  const DashboardScreen({
+    super.key,
+    this.initialCows,
+    this.onTabSelected,
+    this.showBottomNav = true,
+  });
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  late List<Cow> _cows;
+
+  @override
+  void initState() {
+    super.initState();
+    _cows = widget.initialCows ?? List.from(MDSMockRepository.getInitialCows());
+  }
+
+  void _navigateToCowProfile(Cow cow) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CowProfileScreen(cow: cow),
+      ),
+    );
+  }
+
+  void _showAddCowDialog() {
+    final tagController = TextEditingController(text: 'Tag ${100 + _cows.length + 1}');
+    final breedController = TextEditingController(text: 'Holstein Friesian');
+    final ageController = TextEditingController(text: '3');
+    StatusType selectedStatus = StatusType.healthy;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Register Cow', style: AppTypography.h2),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: tagController,
+                style: AppTypography.bodyRegularDark,
+                decoration: const InputDecoration(labelText: 'Tag Number (e.g. Tag 106)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: breedController,
+                style: AppTypography.bodyRegularDark,
+                decoration: const InputDecoration(labelText: 'Breed'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ageController,
+                keyboardType: TextInputType.number,
+                style: AppTypography.bodyRegularDark,
+                decoration: const InputDecoration(labelText: 'Age (years)'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Initial Status: ', style: AppTypography.listRowTitle),
+                  const Spacer(),
+                  DropdownButton<StatusType>(
+                    value: selectedStatus,
+                    underline: const SizedBox(),
+                    items: const [
+                      DropdownMenuItem(
+                        value: StatusType.healthy,
+                        child: Text('Healthy'),
+                      ),
+                      DropdownMenuItem(
+                        value: StatusType.atRisk,
+                        child: Text('At Risk'),
+                      ),
+                      DropdownMenuItem(
+                        value: StatusType.pending,
+                        child: Text('Pending'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          selectedStatus = val;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              CustomPrimaryButton(
+                label: 'Save Cow',
+                onPressed: () {
+                  if (tagController.text.trim().isNotEmpty) {
+                    final newCow = Cow(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      tagNumber: tagController.text.trim(),
+                      breed: breedController.text.trim().isEmpty
+                          ? 'Holstein'
+                          : breedController.text.trim(),
+                      age: int.tryParse(ageController.text.trim()) ?? 3,
+                      status: selectedStatus,
+                      lastTested: 'Today',
+                      history: [
+                        TestHistoryRecord(
+                          date: '2026-09-15',
+                          mastitisPresent: selectedStatus == StatusType.atRisk,
+                        ),
+                      ],
+                    );
+                    setState(() {
+                      _cows.insert(0, newCow);
+                    });
+                    Navigator.of(ctx).pop();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundSurface,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(
+            left: AppSpacing.horizontalScreenMargin,
+            right: AppSpacing.horizontalScreenMargin,
+            top: AppSpacing.verticalScreenMargin,
+            bottom: 8.0,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: AppRadii.containerBorderRadius,
+              border: Border.all(
+                color: AppColors.borderNeutral,
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: AppRadii.containerBorderRadius,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // AppHeader ("Dashboard")
+                  const AppHeader(
+                    title: 'Dashboard',
+                    showBackButton: false,
+                  ),
+
+                  // Content Area
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Title: "My cows" (H1: 24px, 600 Semi-bold, #215433)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                          child: Text(
+                            'My cows',
+                            style: AppTypography.h1,
+                          ),
+                        ),
+
+                        // ListView.builder generating DataRowItem with thin grey Dividers
+                        Expanded(
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            itemCount: _cows.length,
+                            separatorBuilder: (context, index) => const Divider(
+                              color: AppColors.borderNeutral,
+                              height: 1.0,
+                              thickness: 1.0,
+                            ),
+                            itemBuilder: (context, index) {
+                              final cow = _cows[index];
+                              return DataRowItem(
+                                leadingText: cow.displayTag,
+                                badgeState: cow.status,
+                                trailingText: cow.lastTested,
+                                onTap: () => _navigateToCowProfile(cow),
+                              );
+                            },
+                          ),
+                        ),
+
+                        // Actions: CustomPrimaryButton ("+ Add cow") placed below the list
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: CustomPrimaryButton(
+                            label: '+ Add cow',
+                            leadingIcon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            onPressed: _showAddCowDialog,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      // Footer: BottomNavBar with "Dash" in the active state
+      bottomNavigationBar: widget.showBottomNav
+          ? BottomNavBar(
+              activeIndex: 0,
+              onTabSelected: widget.onTabSelected ?? (index) {},
+            )
+          : null,
+    );
+  }
+}
