@@ -12,11 +12,19 @@ import 'login_screen.dart';
 /// - Operator details, farm credentials, and system settings.
 /// - Footer: BottomNavBar with "Profile" in active state.
 class ProfileScreen extends StatelessWidget {
+  final String firstName;
+  final String lastName;
+  final String email;
+  final int cowsRegistered;
   final ValueChanged<int>? onTabSelected;
   final bool showBottomNav;
 
   const ProfileScreen({
     super.key,
+    this.firstName = 'John',
+    this.lastName = 'Doe',
+    this.email = 'farmer@dairyfarm.com',
+    this.cowsRegistered = 5,
     this.onTabSelected,
     this.showBottomNav = true,
   });
@@ -73,6 +81,7 @@ class ProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Header Area: Centered circular avatar icon (light green background, dark green user icon)
                           Center(
                             child: CircleAvatar(
                               radius: 36,
@@ -85,72 +94,73 @@ class ProfileScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            'Farmer John Doe',
+
+                          // Farmer's full name (e.g., "Farmer John Doe").
+                          // CRITICAL: Do not include a subtitle string below the name.
+                          Text(
+                            'Farmer $firstName $lastName',
                             textAlign: TextAlign.center,
                             style: AppTypography.h2,
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Green Valley Dairy Farm • Unit #4',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.bodyRegular,
-                          ),
                           const SizedBox(height: 24),
 
-                          // Profile Info Card
+                          // Data Card: Bordered container (#E0E5E0) with rounded edges containing four data rows
                           Container(
                             padding: const EdgeInsets.all(16.0),
                             decoration: BoxDecoration(
                               color: AppColors.backgroundSurface,
                               borderRadius: AppRadii.containerBorderRadius,
                               border: Border.all(
-                                color: AppColors.borderNeutral,
+                                color: const Color(0xFFE0E5E0),
                                 width: 1.0,
                               ),
                             ),
                             child: Column(
                               children: [
                                 _buildProfileInfoRow(
-                                  label: 'Account ID',
-                                  value: 'MDS-84920',
+                                  label: 'First Name',
+                                  value: firstName,
                                 ),
                                 const Divider(
-                                  color: AppColors.borderNeutral,
-                                  height: 20,
+                                  color: Color(0xFFE0E5E0),
+                                  height: 24,
+                                  thickness: 1.0,
                                 ),
                                 _buildProfileInfoRow(
-                                  label: 'Hardware Telemetry',
-                                  value: 'Online (v2.4)',
+                                  label: 'Last Name',
+                                  value: lastName,
                                 ),
                                 const Divider(
-                                  color: AppColors.borderNeutral,
-                                  height: 20,
+                                  color: Color(0xFFE0E5E0),
+                                  height: 24,
+                                  thickness: 1.0,
                                 ),
                                 _buildProfileInfoRow(
-                                  label: 'Registered Herd Size',
-                                  value: '124 head',
+                                  label: 'Email Address',
+                                  value: email,
                                 ),
                                 const Divider(
-                                  color: AppColors.borderNeutral,
-                                  height: 20,
+                                  color: Color(0xFFE0E5E0),
+                                  height: 24,
+                                  thickness: 1.0,
                                 ),
                                 _buildProfileInfoRow(
-                                  label: 'Last Calibration',
-                                  value: '2026-09-12',
+                                  label: 'Cows Registered',
+                                  value: cowsRegistered.toString(),
                                 ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 32),
 
+                          // Actions: A full-width outlined button with an exit icon and the label "Log out"
                           CustomPrimaryButton(
                             label: 'Log out',
                             isSecondary: true,
                             leadingIcon: const Icon(
-                              Icons.logout_rounded,
+                              Icons.exit_to_app_rounded,
                               color: AppColors.primaryTheme,
-                              size: 18,
+                              size: 20,
                             ),
                             onPressed: () => _handleSignOut(context),
                           ),
@@ -164,6 +174,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
       ),
+      // Footer: BottomNavBar with "Profile" active
       bottomNavigationBar: showBottomNav
           ? BottomNavBar(
               activeIndex: 2,
@@ -180,6 +191,7 @@ class ProfileScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        // Left side holds the label (grey text)
         Text(
           label,
           style: const TextStyle(
@@ -189,12 +201,13 @@ class ProfileScreen extends StatelessWidget {
             color: AppColors.textSecondary,
           ),
         ),
+        // Right side holds the dynamic value (dark text, bolded)
         Text(
           value,
           style: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
           ),
         ),

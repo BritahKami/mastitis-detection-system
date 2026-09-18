@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../constants/theme_constants.dart';
 import '../widgets/custom_primary_button.dart';
 import 'main_shell_screen.dart';
+import 'register_screen.dart';
 
 /// Screen 1: Auth/Login Screen
 ///
@@ -84,31 +85,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showRegisterDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.container),
-        ),
-        title: const Text('MDS Registration', style: AppTypography.h2),
-        content: const Text(
-          'New farm registration creates your herd database and configures detection telemetry.',
-          style: AppTypography.bodyRegularDark,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              'Close',
-              style: TextStyle(
-                color: AppColors.primaryTheme,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+  void _navigateToRegister() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const RegisterScreen(),
       ),
     );
   }
@@ -338,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   CustomPrimaryButton(
                     label: 'Register',
                     isSecondary: true,
-                    onPressed: _showRegisterDialog,
+                    onPressed: _navigateToRegister,
                   ),
                 ],
               ),

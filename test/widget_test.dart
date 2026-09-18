@@ -3,9 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mastitis_detection_app/constants/theme_constants.dart';
 import 'package:mastitis_detection_app/main.dart';
 import 'package:mastitis_detection_app/models/mds_models.dart';
+import 'package:mastitis_detection_app/screens/dashboard_screen.dart';
+import 'package:mastitis_detection_app/screens/profile_screen.dart';
+import 'package:mastitis_detection_app/screens/register_screen.dart';
 import 'package:mastitis_detection_app/widgets/app_header.dart';
 import 'package:mastitis_detection_app/widgets/bottom_nav_bar.dart';
 import 'package:mastitis_detection_app/widgets/custom_primary_button.dart';
+import 'package:mastitis_detection_app/widgets/custom_text_field.dart';
 import 'package:mastitis_detection_app/widgets/data_row_item.dart';
 import 'package:mastitis_detection_app/widgets/status_badge.dart';
 
@@ -263,6 +267,204 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('My cows'), findsOneWidget);
+    });
+
+    testWidgets('Navigation from Login to RegisterScreen and back',
+        (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // Tap Register button on LoginScreen
+      await tester.tap(find.text('Register'));
+      await tester.pumpAndSettle();
+
+      // Verify Screen 2: Auth/Register Screen UI
+      expect(find.text('Create Account'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.text('First Name'), findsOneWidget);
+      expect(find.text('Last Name'), findsOneWidget);
+      expect(find.text('Email Address'), findsOneWidget);
+      expect(find.text('Password'), findsOneWidget);
+      expect(find.text('Register Account'), findsOneWidget);
+      expect(find.text('Already have an account? Log in'), findsOneWidget);
+
+      // Verify header color is Primary Theme (#215433)
+      final headerText = tester.widget<Text>(find.text('Create Account'));
+      expect(headerText.style?.color, AppColors.primaryTheme);
+
+      // Tap footer "Already have an account? Log in"
+      await tester.tap(find.text('Already have an account? Log in'));
+      await tester.pumpAndSettle();
+
+      // Verify returned to LoginScreen
+      expect(find.text('Welcome back'), findsOneWidget);
+    });
+
+    testWidgets('Register Account action transitions to Dashboard',
+        (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // Go to Register
+      await tester.tap(find.text('Register'));
+      await tester.pumpAndSettle();
+
+      // Enter fields
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'First Name'), 'Jane');
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Last Name'), 'Smith');
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Email Address'),
+          'jane@dairyfarm.com');
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Password'), 'secret123');
+
+      // Tap Register Account
+      await tester.tap(find.text('Register Account'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Should be on Dashboard
+      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('My cows'), findsOneWidget);
+    });
+  });
+
+  group('Dashboard: Add Cow Modal Bottom Sheet', () {
+    testWidgets(
+        'Modal opens with exactly three CustomTextFields and NO Initial Status dropdown',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: DashboardScreen(showBottomNav: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap "+ Add cow"
+      await tester.tap(find.text('+ Add cow'));
+      await tester.pumpAndSettle();
+
+      // Header: "Register Cow" with a top-right close icon ("X")
+      expect(find.text('Register Cow'), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      // Inputs: Contains exactly three CustomTextField inputs
+      expect(find.byType(CustomTextField), findsNWidgets(3));
+      expect(find.text('Tag Number (e.g. Tag 106)'), findsOneWidget);
+      expect(find.text('Breed'), findsOneWidget);
+      expect(find.text('Age (years)'), findsOneWidget);
+
+      // CRITICAL: Ensure the "Initial Status" dropdown is completely removed
+      expect(find.text('Initial Status: '), findsNothing);
+      expect(find.byType(DropdownButton<StatusType>), findsNothing);
+
+      // Actions: CustomPrimaryButton ("Save Cow") pinned to bottom
+      expect(find.text('Save Cow'), findsOneWidget);
+
+      // Tap close icon
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(find.text('Register Cow'), findsNothing);
+    });
+
+    testWidgets('Save Cow adds new cow to the list', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: DashboardScreen(showBottomNav: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('+ Add cow'));
+      await tester.pumpAndSettle();
+
+      // Enter a unique tag number
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Tag Number (e.g. Tag 106)'),
+          'Tag 999');
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Breed'), 'Jersey Special');
+      await tester.enterText(
+          find.widgetWithText(CustomTextField, 'Age (years)'), '4');
+
+      await tester.tap(find.text('Save Cow'));
+      await tester.pumpAndSettle();
+
+      // Cow modal dismissed and new cow appears on the list
+      expect(find.text('Register Cow'), findsNothing);
+      expect(find.text('Tag 999'), findsOneWidget);
+    });
+  });
+
+  group('User Profile Screen Modifications', () {
+    testWidgets('ProfileScreen renders strictly to specifications',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ProfileScreen(
+            firstName: 'John',
+            lastName: 'Doe',
+            email: 'farmer@dairyfarm.com',
+            cowsRegistered: 5,
+            showBottomNav: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Layout: White card layout with AppHeader ("Profile")
+      expect(find.widgetWithText(AppHeader, 'Profile'), findsOneWidget);
+
+      // Header Area: Centered circular avatar icon (light green bg, dark green user icon)
+      final avatarFinder = find.byType(CircleAvatar);
+      expect(avatarFinder, findsOneWidget);
+      final avatar = tester.widget<CircleAvatar>(avatarFinder);
+      expect(avatar.backgroundColor, AppColors.badgeHealthyBg);
+      expect(find.byIcon(Icons.person_rounded), findsOneWidget);
+
+      // Farmer's full name
+      expect(find.text('Farmer John Doe'), findsOneWidget);
+
+      // CRITICAL: Do not include a subtitle string below the name
+      expect(find.textContaining('Green Valley'), findsNothing);
+      expect(find.textContaining('Unit #4'), findsNothing);
+
+      // Data Card: Bordered container (#E0E5E0) with 4 rows separated by dividers
+      // CRITICAL: Remove Account ID, Hardware Telemetry, Registered Herd Size, and Last Calibration
+      expect(find.text('Account ID'), findsNothing);
+      expect(find.text('Hardware Telemetry'), findsNothing);
+      expect(find.text('Registered Herd Size'), findsNothing);
+      expect(find.text('Last Calibration'), findsNothing);
+
+      // Verify exact 4 rows
+      expect(find.text('First Name'), findsOneWidget);
+      expect(find.text('John'), findsOneWidget);
+
+      expect(find.text('Last Name'), findsOneWidget);
+      expect(find.text('Doe'), findsOneWidget);
+
+      expect(find.text('Email Address'), findsOneWidget);
+      expect(find.text('farmer@dairyfarm.com'), findsOneWidget);
+
+      expect(find.text('Cows Registered'), findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
+
+      // Check font weight bold on dynamic value
+      final johnText = tester.widget<Text>(find.text('John'));
+      expect(johnText.style?.fontWeight, FontWeight.bold);
+
+      // Actions: Full-width outlined button with an exit icon and the label "Log out"
+      expect(find.text('Log out'), findsOneWidget);
+      expect(find.byIcon(Icons.exit_to_app_rounded), findsOneWidget);
+
+      // Footer: BottomNavBar with "Profile" active (tab index 2)
+      final bottomNavFinder = find.byType(BottomNavBar);
+      expect(bottomNavFinder, findsOneWidget);
+      final bottomNav = tester.widget<BottomNavBar>(bottomNavFinder);
+      expect(bottomNav.activeIndex, 2);
     });
   });
 }

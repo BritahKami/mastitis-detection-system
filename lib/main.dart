@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'constants/theme_constants.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell_screen.dart';
+import 'screens/register_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ class MastitisDetectionApp extends StatelessWidget {
       home: const LoginScreen(),
       routes: {
         '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
         '/dashboard': (context) => const MainShellScreen(initialIndex: 0),
         '/alerts': (context) => const MainShellScreen(initialIndex: 1),
         '/profile': (context) => const MainShellScreen(initialIndex: 2),

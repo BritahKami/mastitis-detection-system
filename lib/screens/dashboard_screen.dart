@@ -4,6 +4,7 @@ import '../models/mds_models.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/custom_primary_button.dart';
+import '../widgets/custom_text_field.dart';
 import '../widgets/data_row_item.dart';
 import 'cow_profile_screen.dart';
 
@@ -55,122 +56,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final tagController = TextEditingController(text: 'Tag ${100 + _cows.length + 1}');
     final breedController = TextEditingController(text: 'Holstein Friesian');
     final ageController = TextEditingController(text: '3');
-    StatusType selectedStatus = StatusType.healthy;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header: "Register Cow" with a top-right close icon ("X")
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Register Cow', style: AppTypography.h2),
+                IconButton(
+                  icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
             ),
-          ),
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Register Cow', style: AppTypography.h2),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: tagController,
-                style: AppTypography.bodyRegularDark,
-                decoration: const InputDecoration(labelText: 'Tag Number (e.g. Tag 106)'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: breedController,
-                style: AppTypography.bodyRegularDark,
-                decoration: const InputDecoration(labelText: 'Breed'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ageController,
-                keyboardType: TextInputType.number,
-                style: AppTypography.bodyRegularDark,
-                decoration: const InputDecoration(labelText: 'Age (years)'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Initial Status: ', style: AppTypography.listRowTitle),
-                  const Spacer(),
-                  DropdownButton<StatusType>(
-                    value: selectedStatus,
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: StatusType.healthy,
-                        child: Text('Healthy'),
-                      ),
-                      DropdownMenuItem(
-                        value: StatusType.atRisk,
-                        child: Text('At Risk'),
-                      ),
-                      DropdownMenuItem(
-                        value: StatusType.pending,
-                        child: Text('Pending'),
+            const SizedBox(height: 12),
+
+            // Inputs: Exactly three CustomTextField inputs
+            // 1. "Tag Number (e.g. Tag 106)"
+            CustomTextField(
+              label: 'Tag Number (e.g. Tag 106)',
+              controller: tagController,
+            ),
+            const SizedBox(height: 12),
+
+            // 2. "Breed"
+            CustomTextField(
+              label: 'Breed',
+              controller: breedController,
+            ),
+            const SizedBox(height: 12),
+
+            // 3. "Age (years)"
+            CustomTextField(
+              label: 'Age (years)',
+              controller: ageController,
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 20),
+
+            // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
+            CustomPrimaryButton(
+              label: 'Save Cow',
+              onPressed: () {
+                if (tagController.text.trim().isNotEmpty) {
+                  final newCow = Cow(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    tagNumber: tagController.text.trim(),
+                    breed: breedController.text.trim().isEmpty
+                        ? 'Holstein'
+                        : breedController.text.trim(),
+                    age: int.tryParse(ageController.text.trim()) ?? 3,
+                    status: StatusType.healthy,
+                    lastTested: 'Today',
+                    history: [
+                      const TestHistoryRecord(
+                        date: '2026-09-15',
+                        mastitisPresent: false,
                       ),
                     ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setModalState(() {
-                          selectedStatus = val;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              CustomPrimaryButton(
-                label: 'Save Cow',
-                onPressed: () {
-                  if (tagController.text.trim().isNotEmpty) {
-                    final newCow = Cow(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      tagNumber: tagController.text.trim(),
-                      breed: breedController.text.trim().isEmpty
-                          ? 'Holstein'
-                          : breedController.text.trim(),
-                      age: int.tryParse(ageController.text.trim()) ?? 3,
-                      status: selectedStatus,
-                      lastTested: 'Today',
-                      history: [
-                        TestHistoryRecord(
-                          date: '2026-09-15',
-                          mastitisPresent: selectedStatus == StatusType.atRisk,
-                        ),
-                      ],
-                    );
-                    setState(() {
-                      _cows.insert(0, newCow);
-                    });
-                    Navigator.of(ctx).pop();
-                  }
-                },
-              ),
-            ],
-          ),
+                  );
+                  setState(() {
+                    _cows.insert(0, newCow);
+                  });
+                  Navigator.of(ctx).pop();
+                }
+              },
+            ),
+          ],
         ),
       ),
     );
