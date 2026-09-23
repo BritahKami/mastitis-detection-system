@@ -31,7 +31,10 @@ class ProfileScreen extends StatelessWidget {
 
   void _handleSignOut(BuildContext context) {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/login'),
+        builder: (context) => const LoginScreen(),
+      ),
       (route) => false,
     );
   }
@@ -201,14 +204,20 @@ class ProfileScreen extends StatelessWidget {
             color: AppColors.textSecondary,
           ),
         ),
-        // Right side holds the dynamic value (dark text, bolded)
-        Text(
-          value,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+        const SizedBox(width: 16),
+        // Right side holds the dynamic value (dark text, bolded, constrained against overflow)
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
       ],

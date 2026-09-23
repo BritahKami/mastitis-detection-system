@@ -28,8 +28,10 @@ class DetectionResultScreen extends StatelessWidget {
   });
 
   void _handleBackToDashboard(BuildContext context) {
-    // Pop back until the first route in the main shell (Dashboard)
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    // Pop back until the MainShellScreen root (Dashboard)
+    Navigator.of(context).popUntil(
+      (route) => route.isFirst || route.settings.name == '/dashboard',
+    );
   }
 
   @override

@@ -50,6 +50,7 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
 
       Navigator.of(context).push(
         MaterialPageRoute(
+          settings: const RouteSettings(name: '/detection_result'),
           builder: (context) => DetectionResultScreen(
             result: result,
             cow: widget.cow,

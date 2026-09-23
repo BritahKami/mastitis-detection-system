@@ -48,10 +48,12 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _isLoading = false;
       });
-      Navigator.of(context).pushReplacement(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
+          settings: const RouteSettings(name: '/dashboard'),
           builder: (context) => const MainShellScreen(),
         ),
+        (route) => false,
       );
     });
   }
@@ -88,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _navigateToRegister() {
     Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: '/register'),
         builder: (context) => const RegisterScreen(),
       ),
     );
@@ -169,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         // Label: Phone / Email
                         const Text(
-                          'Phone / Email',
+                          'Email',
                           style: TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 13,
@@ -183,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.emailAddress,
                           style: AppTypography.bodyRegularDark,
                           decoration: InputDecoration(
-                            hintText: 'Enter phone or email',
+                            hintText: 'Enter your email',
                             prefixIcon: const Icon(
                               Icons.person_outline_rounded,
                               color: AppColors.textSecondary,

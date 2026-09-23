@@ -47,6 +47,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _navigateToCowProfile(Cow cow) {
     Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: '/cow_profile'),
         builder: (context) => CowProfileScreen(cow: cow),
       ),
     );

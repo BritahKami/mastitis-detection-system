@@ -279,6 +279,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify Screen 2: Auth/Register Screen UI
+      expect(find.byType(RegisterScreen), findsOneWidget);
       expect(find.text('Create Account'), findsOneWidget);
       expect(find.byType(SingleChildScrollView), findsOneWidget);
       expect(find.text('First Name'), findsOneWidget);
@@ -300,7 +301,7 @@ void main() {
       expect(find.text('Welcome back'), findsOneWidget);
     });
 
-    testWidgets('Register Account action transitions to Dashboard',
+    testWidgets('Register Account action transitions to Dashboard and sets root',
         (tester) async {
       await tester.pumpWidget(const MastitisDetectionApp());
       await tester.pumpAndSettle();
@@ -329,6 +330,83 @@ void main() {
       // Should be on Dashboard
       expect(find.text('Dashboard'), findsOneWidget);
       expect(find.text('My cows'), findsOneWidget);
+
+      // Verify MainShellScreen is absolute root and cannot pop
+      final nav = Navigator.of(tester.element(find.text('Dashboard')));
+      expect(nav.canPop(), isFalse);
+    });
+
+    testWidgets(
+        'Navigation stack bug fix: Register -> Select cow to test -> Back to dashboard returns to Dashboard, not Auth',
+        (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // 1. Launch the app and navigate to the Register screen
+      await tester.tap(find.text('Register'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RegisterScreen), findsOneWidget);
+
+      // 2. Register a new user. The app routes to the main app shell
+      await tester.tap(find.text('Register Account'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('My cows'), findsOneWidget);
+
+      // Verify MainShellScreen is root
+      expect(Navigator.of(tester.element(find.text('Dashboard'))).canPop(), isFalse);
+
+      // 3. Tap a cow and then "Select cow to test" to route to Detection Result screen
+      await tester.tap(find.text('Tag 102'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cow profile'), findsOneWidget);
+
+      await tester.tap(find.text('Select cow to test'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('Detection result'), findsOneWidget);
+
+      // 4. Tap the "Back to dashboard" button
+      await tester.tap(find.text('Back to dashboard'));
+      await tester.pumpAndSettle();
+
+      // Expected: Pop back to Dashboard tab, NOT RegisterScreen or LoginScreen!
+      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('My cows'), findsOneWidget);
+      expect(find.byType(RegisterScreen), findsNothing);
+      expect(find.text('Create Account'), findsNothing);
+      expect(find.text('Welcome back'), findsNothing);
+      expect(Navigator.of(tester.element(find.text('Dashboard'))).canPop(), isFalse);
+    });
+
+    testWidgets(
+        'Logout from Profile clears main app stack and sets LoginScreen as new root',
+        (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // Log in
+      await tester.tap(find.text('Log in'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Switch to Profile tab
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      expect(find.text('Farmer John Doe'), findsOneWidget);
+
+      // Tap Log out
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+
+      // Expected: LoginScreen is the new root
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(Navigator.of(tester.element(find.text('Welcome back'))).canPop(), isFalse);
     });
   });
 
@@ -456,6 +534,12 @@ void main() {
       final johnText = tester.widget<Text>(find.text('John'));
       expect(johnText.style?.fontWeight, FontWeight.bold);
 
+      // Check text overflow and alignment properties
+      final emailText = tester.widget<Text>(find.text('farmer@dairyfarm.com'));
+      expect(emailText.textAlign, TextAlign.right);
+      expect(emailText.maxLines, 1);
+      expect(emailText.overflow, TextOverflow.ellipsis);
+
       // Actions: Full-width outlined button with an exit icon and the label "Log out"
       expect(find.text('Log out'), findsOneWidget);
       expect(find.byIcon(Icons.exit_to_app_rounded), findsOneWidget);
@@ -465,6 +549,57 @@ void main() {
       expect(bottomNavFinder, findsOneWidget);
       final bottomNav = tester.widget<BottomNavBar>(bottomNavFinder);
       expect(bottomNav.activeIndex, 2);
+    });
+
+    testWidgets(
+        'ProfileScreen handles very long email without RenderFlex overflow',
+        (tester) async {
+      // Set mobile screen width (e.g., iPhone SE 375x667) to test horizontal layout
+      tester.view.physicalSize = const Size(375, 667);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      FlutterErrorDetails? caughtDetails;
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        caughtDetails = details;
+      };
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ProfileScreen(
+            firstName: 'John',
+            lastName: 'Doe',
+            email: 'verylongfarmeremailaddresswhichwouldotherwiseoverflow@dairyfarmcooperativenetwork.com',
+            cowsRegistered: 1250,
+            showBottomNav: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      FlutterError.onError = originalOnError;
+
+      expect(caughtDetails, isNull);
+      final longEmailFinder = find.text(
+          'verylongfarmeremailaddresswhichwouldotherwiseoverflow@dairyfarmcooperativenetwork.com');
+      expect(longEmailFinder, findsOneWidget);
+
+      final emailWidget = tester.widget<Text>(longEmailFinder);
+      expect(emailWidget.overflow, TextOverflow.ellipsis);
+      expect(emailWidget.maxLines, 1);
+      expect(emailWidget.textAlign, TextAlign.right);
+
+      // Verify the Text widget is wrapped inside an Expanded widget in its Row
+      expect(
+        find.ancestor(
+          of: longEmailFinder,
+          matching: find.byType(Expanded),
+        ),
+        findsWidgets,
+      );
     });
   });
 }

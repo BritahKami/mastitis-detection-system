@@ -52,10 +52,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _isLoading = false;
       });
-      Navigator.of(context).pushReplacement(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
+          settings: const RouteSettings(name: '/dashboard'),
           builder: (context) => const MainShellScreen(),
         ),
+        (route) => false,
       );
     });
   }
