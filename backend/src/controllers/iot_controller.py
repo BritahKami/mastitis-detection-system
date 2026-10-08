@@ -1,0 +1,105 @@
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from src.models.db_models import Cow, SensorReading, DetectionResult, Alert
+from src.models.schemas import IoTSensorReadingRequest, IoTProcessingResponse
+from src.services.ml_service import ml_service
+
+
+class IoTController:
+    """
+    Controller handling ESP32 IoT telemetry ingestion, Machine Learning inference,
+    database persistence, cow health status transition, and automated alert dispatch.
+    """
+
+    @staticmethod
+    def process_sensor_reading(
+        payload: IoTSensorReadingRequest,
+        db: Session
+    ) -> IoTProcessingResponse:
+        """
+        Steps 3, 4, 5 of the asynchronous testing workflow:
+        1. Ingests raw telemetry (temperature, pH, electrical_conductivity).
+        2. Persists telemetry in Sensor_Reading table.
+        3. Invokes in-memory Random Forest model with strict feature order.
+        4. Persists prediction in Detection_Result table linked directly to reading_id.
+        5. Updates Cow health_status to 'At Risk' or 'Healthy'.
+        6. Automatically dispatches an Alert if Mastitis Present.
+        7. Commits all state changes atomically.
+        """
+        # 1. Verify cow exists in database
+        cow = db.query(Cow).filter(Cow.cow_id == payload.cow_id).first()
+        if not cow:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cow with ID {payload.cow_id} is not registered in the system."
+            )
+
+        now = datetime.now(timezone.utc)
+
+        try:
+            # 2. Insert into Sensor_Reading table
+            sensor_reading = SensorReading(
+                cow_id=payload.cow_id,
+                temperature=payload.temperature,
+                pH=payload.pH,
+                electrical_conductivity=payload.electrical_conductivity,
+                reading_time=now
+            )
+            db.add(sensor_reading)
+            db.flush()  # Flushes to obtain auto-generated reading_id
+
+            # 3. ML Inference using exact feature ordering: [temperature, pH, electrical_conductivity]
+            prediction_label = ml_service.predict(
+                temperature=payload.temperature,
+                ph=payload.pH,
+                electrical_conductivity=payload.electrical_conductivity
+            )
+
+            # 4. Insert into Detection_Result table
+            detection_result = DetectionResult(
+                cow_id=payload.cow_id,
+                reading_id=sensor_reading.reading_id,
+                prediction=prediction_label,
+                detection_time=now
+            )
+            db.add(detection_result)
+            db.flush()  # Flushes to obtain auto-generated result_id
+
+            # 5. Update Cow health status
+            new_health_status = "At Risk" if prediction_label == "Mastitis Present" else "Healthy"
+            cow.health_status = new_health_status
+
+            # 6. Generate Alert if Mastitis is detected
+            if prediction_label == "Mastitis Present":
+                alert_message = (
+                    f"Urgent: Mastitis detected for Cow {cow.cow_tag}. "
+                    f"Temp: {payload.temperature:.1f}°C, pH: {payload.pH:.2f}, "
+                    f"Cond: {payload.electrical_conductivity:.2f} mS/cm."
+                )
+                alert = Alert(
+                    result_id=detection_result.result_id,
+                    farmer_id=cow.farmer_id,
+                    message=alert_message,
+                    status="Unread",
+                    send_time=now
+                )
+                db.add(alert)
+
+            # 7. Atomically commit the entire transaction
+            db.commit()
+
+            return IoTProcessingResponse(
+                status="Processed",
+                reading_id=sensor_reading.reading_id,
+                result_id=detection_result.result_id,
+                prediction=prediction_label,
+                cow_health_status=new_health_status
+            )
+
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"IoT telemetry processing and ML inference failed: {str(e)}"
+            )

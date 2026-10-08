@@ -1,0 +1,137 @@
+from datetime import datetime, timezone
+from typing import Union
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from fastapi import HTTPException, status
+from fastapi.responses import JSONResponse
+from src.models.db_models import Farmer, Cow
+from src.models.schemas import (
+    TestInitiationResponse,
+    TestPollPendingResponse,
+    TestPollCompletedResponse,
+    LatestResultPayload
+)
+
+
+class TestController:
+    """
+    Controller managing the asynchronous diagnostic testing lifecycle:
+    - Step 1: Mobile App triggers test initiation -> transitions Cow to 'Pending'
+    - Step 2 & 6: Mobile App short polls -> returns 202 Accepted while Pending, 200 OK once resolved
+    """
+
+    @staticmethod
+    def initiate_test(
+        cow_id: int,
+        current_farmer: Farmer,
+        db: Session
+    ) -> TestInitiationResponse:
+        """
+        Step 1: Mobile application initiates a diagnostic test for a specific cow.
+        The backend transitions the cow's health_status to 'Pending' in the database.
+        """
+        cow = (
+            db.query(Cow)
+            .filter(Cow.cow_id == cow_id, Cow.farmer_id == current_farmer.farmer_id)
+            .first()
+        )
+        if not cow:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cow with ID {cow_id} not found in your registered herd."
+            )
+
+        # Set status to Pending
+        cow.health_status = "Pending"
+        db.commit()
+        db.refresh(cow)
+
+        now = datetime.now(timezone.utc)
+        return TestInitiationResponse(
+            message="Diagnostic test initiated. Awaiting IoT sensor telemetry.",
+            cow_id=cow.cow_id,
+            health_status="Pending",
+            timestamp=now
+        )
+
+    @staticmethod
+    def poll_latest_result(
+        cow_id: int,
+        current_farmer: Farmer,
+        db: Session
+    ) -> Union[JSONResponse, TestPollCompletedResponse]:
+        """
+        Step 2 & Step 6: Mobile App polls every 2 seconds.
+        - While cow.health_status == 'Pending': returns HTTP 202 Accepted.
+        - When completed: returns HTTP 200 OK with combined Sensor_Reading + Detection_Result,
+          resolving the polling cycle.
+        """
+        cow = (
+            db.query(Cow)
+            .filter(Cow.cow_id == cow_id, Cow.farmer_id == current_farmer.farmer_id)
+            .first()
+        )
+        if not cow:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cow with ID {cow_id} not found."
+            )
+
+        # Step 2: Still Pending -> Return HTTP 202 Accepted
+        if cow.health_status == "Pending":
+            pending_payload = TestPollPendingResponse(
+                status="Pending",
+                cow_id=cow_id,
+                message="Sensor data acquisition in progress. Please continue polling."
+            )
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content=pending_payload.model_dump()
+            )
+
+        # Step 6: Processed -> Fetch latest Detection_Result joined with Sensor_Reading
+        query = text("""
+            SELECT 
+                dr.result_id,
+                sr.reading_id,
+                dr.cow_id,
+                c.cow_tag,
+                sr.temperature,
+                sr.pH,
+                sr.electrical_conductivity,
+                sr.reading_time,
+                dr.prediction,
+                dr.detection_time,
+                c.health_status
+            FROM Detection_Result dr
+            JOIN Sensor_Reading sr ON dr.reading_id = sr.reading_id
+            JOIN Cow c ON dr.cow_id = c.cow_id
+            WHERE dr.cow_id = :cow_id
+            ORDER BY dr.detection_time DESC
+            LIMIT 1
+        """)
+
+        latest_record = db.execute(query, {"cow_id": cow_id}).mappings().first()
+
+        if not latest_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No diagnostic test results recorded for Cow {cow.cow_tag}."
+            )
+
+        return TestPollCompletedResponse(
+            status="Completed",
+            cow_id=cow.cow_id,
+            cow_tag=latest_record["cow_tag"],
+            health_status=latest_record["health_status"],
+            result=LatestResultPayload(
+                result_id=latest_record["result_id"],
+                reading_id=latest_record["reading_id"],
+                temperature=float(latest_record["temperature"]),
+                pH=float(latest_record["pH"]),
+                electrical_conductivity=float(latest_record["electrical_conductivity"]),
+                reading_time=latest_record["reading_time"],
+                prediction=latest_record["prediction"],
+                detection_time=latest_record["detection_time"]
+            )
+        )
