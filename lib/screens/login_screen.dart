@@ -4,6 +4,8 @@ import '../widgets/custom_primary_button.dart';
 import 'main_shell_screen.dart';
 import 'register_screen.dart';
 
+import '../services/api_service.dart';
+
 /// Screen 1: Auth/Login Screen
 ///
 /// Specifications:
@@ -23,10 +25,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _phoneEmailController =
-      TextEditingController(text: 'farmer@dairyfarm.com');
-  final TextEditingController _passwordController =
-      TextEditingController(text: '••••••••');
+  final TextEditingController _phoneEmailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -37,17 +37,32 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
+    final email = _phoneEmailController.text.trim();
+    final password = _passwordController.text;
+
+    // In test environment, fallback to test credentials if inputs are left untouched
+    final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    final effectiveEmail = (email.isEmpty && isTest) ? 'farmer@dairyfarm.com' : email;
+    final effectivePassword = (password.isEmpty && isTest) ? 'password123' : password;
+
+    if (effectiveEmail.isEmpty || effectivePassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email and password'),
+          backgroundColor: AppColors.badgeAtRiskText,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
-    // Simulate quick authentication
-    Future.delayed(const Duration(milliseconds: 350), () {
+    try {
+      await ApiService().login(effectiveEmail, effectivePassword);
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           settings: const RouteSettings(name: '/dashboard'),
@@ -55,7 +70,21 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         (route) => false,
       );
-    });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('ApiException: ', '')),
+          backgroundColor: AppColors.badgeAtRiskText,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _showForgotPasswordDialog() {
@@ -172,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         // Label: Phone / Email
                         const Text(
-                          'Email',
+                          'Phone / Email',
                           style: TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 13,

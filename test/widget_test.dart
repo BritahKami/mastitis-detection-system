@@ -1,11 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mastitis_detection_app/constants/theme_constants.dart';
 import 'package:mastitis_detection_app/main.dart';
 import 'package:mastitis_detection_app/models/mds_models.dart';
 import 'package:mastitis_detection_app/screens/dashboard_screen.dart';
 import 'package:mastitis_detection_app/screens/profile_screen.dart';
 import 'package:mastitis_detection_app/screens/register_screen.dart';
+import 'package:mastitis_detection_app/services/api_service.dart';
 import 'package:mastitis_detection_app/widgets/app_header.dart';
 import 'package:mastitis_detection_app/widgets/bottom_nav_bar.dart';
 import 'package:mastitis_detection_app/widgets/custom_primary_button.dart';
@@ -14,6 +19,132 @@ import 'package:mastitis_detection_app/widgets/data_row_item.dart';
 import 'package:mastitis_detection_app/widgets/status_badge.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({
+      'mds_auth_token': 'test_token',
+      'mds_auth_user_email': 'farmer@dairyfarm.com',
+    });
+
+    final mockClient = MockClient((request) async {
+      final path = request.url.path;
+      final method = request.method;
+
+      if (path == '/api/auth/login') {
+        return http.Response(
+          jsonEncode({
+            'access_token': 'mock_token',
+            'token_type': 'bearer',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/auth/register') {
+        return http.Response(
+          jsonEncode({
+            'message': 'Farmer registered successfully',
+            'farmer_id': 1,
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/auth/profile') {
+        return http.Response(
+          jsonEncode({
+            'farmer_id': 1,
+            'fname': 'John',
+            'lname': 'Doe',
+            'email': 'farmer@dairyfarm.com',
+            'total_cows': 5,
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/cows' && method == 'GET') {
+        return http.Response(
+          jsonEncode([
+            {
+              'cow_id': 101,
+              'cow_tag': 'Tag 101',
+              'breed': 'Holstein Friesian',
+              'age': 4,
+              'health_status': 'Healthy',
+              'lastTested': 'Today',
+            },
+            {
+              'cow_id': 102,
+              'cow_tag': 'Tag 102',
+              'breed': 'Jersey',
+              'age': 3,
+              'health_status': 'At Risk',
+              'lastTested': 'Yesterday',
+              'history': [
+                {
+                  'date': '2026-09-02',
+                  'prediction': 'Mastitis Present',
+                },
+                {
+                  'date': '2026-08-20',
+                  'prediction': 'Mastitis Absent',
+                },
+              ],
+            },
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/cows' && method == 'POST') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final tag = body['cow_tag'] ?? 'Tag 999';
+        final breed = body['breed'] ?? 'Jersey Special';
+        final age = body['age'] ?? 4;
+        return http.Response(
+          jsonEncode({
+            'cow_id': 999,
+            'cow_tag': tag,
+            'breed': breed,
+            'age': age,
+            'health_status': 'Healthy',
+            'lastTested': 'Today',
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path.contains('/api/cows/') && method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'cow_id': 102,
+            'cow_tag': 'Tag 102',
+            'breed': 'Jersey',
+            'age': 3,
+            'health_status': 'At Risk',
+            'lastTested': 'Yesterday',
+            'history': [
+              {
+                'date': '2026-09-15',
+                'prediction': 'Mastitis Present',
+              }
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      return http.Response('{"detail": "Not found"}', 404);
+    });
+
+    ApiService().setClientForTesting(mockClient);
+  });
   group('MDS Design System & Theme Constants', () {
     test('Colors match specifications', () {
       expect(AppColors.primaryTheme, const Color(0xFF215433));

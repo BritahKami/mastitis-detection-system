@@ -17,6 +17,23 @@ class TestHistoryRecord {
   });
 
   String get label => mastitisPresent ? 'Mastitis present' : 'Mastitis absent';
+
+  factory TestHistoryRecord.fromJson(Map<String, dynamic> json) {
+    String dateStr = '';
+    if (json['reading_time'] != null) {
+      dateStr = json['reading_time'].toString().split('T').first;
+    } else if (json['date'] != null) {
+      dateStr = json['date'].toString();
+    }
+    final pred = json['prediction']?.toString().toLowerCase();
+    final bool isPresent =
+        json['mastitisPresent'] == true || pred == 'mastitis present';
+
+    return TestHistoryRecord(
+      date: dateStr,
+      mastitisPresent: isPresent,
+    );
+  }
 }
 
 class Cow {
@@ -40,6 +57,46 @@ class Cow {
 
   String get displayTag => tagNumber.startsWith('Tag ') ? tagNumber : 'Tag $tagNumber';
   String get rawTagId => tagNumber.replaceAll('Tag ', '').trim();
+
+  factory Cow.fromJson(Map<String, dynamic> json) {
+    StatusType parseStatus(String? status) {
+      switch (status?.toLowerCase()) {
+        case 'at risk':
+        case 'atrisk':
+          return StatusType.atRisk;
+        case 'pending':
+          return StatusType.pending;
+        case 'healthy':
+        default:
+          return StatusType.healthy;
+      }
+    }
+
+    final dynamic historyData = json['history'];
+    List<TestHistoryRecord> historyList = [];
+    if (historyData is List) {
+      historyList = historyData
+          .map((h) => TestHistoryRecord.fromJson(h as Map<String, dynamic>))
+          .toList();
+    }
+
+    final rawTag = json['cow_tag'] ?? json['tagNumber'] ?? '';
+    final idVal = json['cow_id']?.toString() ?? json['id']?.toString() ?? '';
+
+    return Cow(
+      id: idVal,
+      tagNumber: rawTag.toString(),
+      breed: json['breed']?.toString() ?? '',
+      age: json['age'] is int
+          ? json['age'] as int
+          : (int.tryParse(json['age']?.toString() ?? '') ?? 0),
+      status: parseStatus(
+          json['health_status']?.toString() ?? json['status']?.toString()),
+      lastTested: json['lastTested']?.toString() ??
+          (historyList.isNotEmpty ? historyList.first.date : 'Not tested'),
+      history: historyList,
+    );
+  }
 
   Cow copyWith({
     String? id,
@@ -133,6 +190,54 @@ class AlertNotification {
       tagNumber: tagNumber ?? this.tagNumber,
       timestamp: timestamp ?? this.timestamp,
       isUnread: isUnread ?? this.isUnread,
+    );
+  }
+
+  factory AlertNotification.fromJson(Map<String, dynamic> json) {
+    final statusStr = json['status']?.toString().toLowerCase();
+    final isUnread = statusStr == 'unread' || json['isUnread'] == true;
+    final tag = json['cow_tag'] ?? json['tagNumber'] ?? 'Unknown Cow';
+    final time = json['send_time'] ?? json['timestamp'] ?? '';
+
+    return AlertNotification(
+      id: json['alert_id']?.toString() ?? json['id']?.toString() ?? '',
+      tagNumber: tag.toString(),
+      timestamp: time.toString().contains('T')
+          ? time.toString().split('T').last.substring(0, 5)
+          : time.toString(),
+      isUnread: isUnread,
+    );
+  }
+}
+
+class FarmerProfile {
+  final int farmerId;
+  final String firstName;
+  final String lastName;
+  final String email;
+  final int totalCows;
+
+  const FarmerProfile({
+    required this.farmerId,
+    required this.firstName,
+    required this.lastName,
+    required this.email,
+    required this.totalCows,
+  });
+
+  String get fullName => '$firstName $lastName'.trim();
+
+  factory FarmerProfile.fromJson(Map<String, dynamic> json) {
+    return FarmerProfile(
+      farmerId: json['farmer_id'] is int
+          ? json['farmer_id'] as int
+          : (int.tryParse(json['farmer_id']?.toString() ?? '') ?? 0),
+      firstName: json['fname']?.toString() ?? '',
+      lastName: json['lname']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      totalCows: json['total_cows'] is int
+          ? json['total_cows'] as int
+          : (int.tryParse(json['total_cows']?.toString() ?? '') ?? 0),
     );
   }
 }

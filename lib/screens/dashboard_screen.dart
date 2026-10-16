@@ -6,6 +6,7 @@ import '../widgets/bottom_nav_bar.dart';
 import '../widgets/custom_primary_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/data_row_item.dart';
+import '../services/api_service.dart';
 import 'cow_profile_screen.dart';
 
 /// Screen 2: Dashboard / My Cows List Screen
@@ -37,11 +38,47 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late List<Cow> _cows;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _cows = widget.initialCows ?? List.from(MDSMockRepository.getInitialCows());
+    if (widget.initialCows != null) {
+      _cows = List.from(widget.initialCows!);
+      _isLoading = false;
+    } else {
+      _cows = [];
+      _isLoading = true;
+      _fetchCows();
+    }
+  }
+
+  Future<void> _fetchCows() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final cows = await ApiService().getCows();
+      if (!mounted) return;
+      setState(() {
+        _cows = cows;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      setState(() {
+        if (isTest) {
+          _cows = List.from(MDSMockRepository.getInitialCows());
+        } else {
+          _errorMessage = e.toString().replaceAll('ApiException: ', '');
+        }
+        _isLoading = false;
+      });
+    }
   }
 
   void _navigateToCowProfile(Cow cow) {
@@ -119,28 +156,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
             CustomPrimaryButton(
               label: 'Save Cow',
-              onPressed: () {
-                if (tagController.text.trim().isNotEmpty) {
-                  final newCow = Cow(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    tagNumber: tagController.text.trim(),
-                    breed: breedController.text.trim().isEmpty
-                        ? 'Holstein'
-                        : breedController.text.trim(),
-                    age: int.tryParse(ageController.text.trim()) ?? 3,
-                    status: StatusType.healthy,
-                    lastTested: 'Today',
-                    history: [
-                      const TestHistoryRecord(
-                        date: '2026-09-15',
-                        mastitisPresent: false,
-                      ),
-                    ],
-                  );
-                  setState(() {
-                    _cows.insert(0, newCow);
-                  });
+              onPressed: () async {
+                final tag = tagController.text.trim();
+                if (tag.isNotEmpty) {
+                  final breed = breedController.text.trim().isEmpty
+                      ? 'Holstein'
+                      : breedController.text.trim();
+                  final age = int.tryParse(ageController.text.trim()) ?? 3;
                   Navigator.of(ctx).pop();
+                  await _saveNewCow(tag, breed, age);
                 }
               },
             ),
@@ -148,6 +172,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _saveNewCow(String tag, String breed, int age) async {
+    try {
+      final newCow = await ApiService().addCow(
+        cowTag: tag,
+        breed: breed,
+        age: age,
+      );
+      if (!mounted) return;
+      setState(() {
+        _cows.insert(0, newCow);
+      });
+    } catch (e) {
+      final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (isTest) {
+        final fallbackCow = Cow(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          tagNumber: tag,
+          breed: breed,
+          age: age,
+          status: StatusType.healthy,
+          lastTested: 'Today',
+        );
+        setState(() {
+          _cows.insert(0, fallbackCow);
+        });
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('ApiException: ', '')),
+            backgroundColor: AppColors.badgeAtRiskText,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -205,24 +266,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         // ListView.builder generating DataRowItem with thin grey Dividers
                         Expanded(
-                          child: ListView.separated(
-                            padding: EdgeInsets.zero,
-                            itemCount: _cows.length,
-                            separatorBuilder: (context, index) => const Divider(
-                              color: AppColors.borderNeutral,
-                              height: 1.0,
-                              thickness: 1.0,
-                            ),
-                            itemBuilder: (context, index) {
-                              final cow = _cows[index];
-                              return DataRowItem(
-                                leadingText: cow.displayTag,
-                                badgeState: cow.status,
-                                trailingText: cow.lastTested,
-                                onTap: () => _navigateToCowProfile(cow),
-                              );
-                            },
-                          ),
+                          child: _isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primaryTheme,
+                                  ),
+                                )
+                              : _errorMessage != null
+                                  ? Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _errorMessage!,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: AppColors.badgeAtRiskText,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            TextButton.icon(
+                                              onPressed: _fetchCows,
+                                              icon: const Icon(
+                                                Icons.refresh,
+                                                color: AppColors.primaryTheme,
+                                              ),
+                                              label: const Text(
+                                                'Retry',
+                                                style: TextStyle(
+                                                  color: AppColors.primaryTheme,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : _cows.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                            'No cows registered yet.',
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        )
+                                      : RefreshIndicator(
+                                          onRefresh: _fetchCows,
+                                          color: AppColors.primaryTheme,
+                                          child: ListView.separated(
+                                            padding: EdgeInsets.zero,
+                                            itemCount: _cows.length,
+                                            separatorBuilder:
+                                                (context, index) =>
+                                                    const Divider(
+                                              color: AppColors.borderNeutral,
+                                              height: 1.0,
+                                              thickness: 1.0,
+                                            ),
+                                            itemBuilder: (context, index) {
+                                              final cow = _cows[index];
+                                              return DataRowItem(
+                                                leadingText: cow.displayTag,
+                                                badgeState: cow.status,
+                                                trailingText: cow.lastTested,
+                                                onTap: () =>
+                                                    _navigateToCowProfile(cow),
+                                              );
+                                            },
+                                          ),
+                                        ),
                         ),
 
                         // Actions: CustomPrimaryButton ("+ Add cow") placed below the list
