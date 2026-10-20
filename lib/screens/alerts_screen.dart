@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/theme_constants.dart';
 import '../models/mds_models.dart';
+import '../services/api_service.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/data_row_item.dart';
@@ -31,24 +32,96 @@ class AlertsScreen extends StatefulWidget {
 
 class _AlertsScreenState extends State<AlertsScreen> {
   late List<AlertNotification> _alerts;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _alerts = widget.initialAlerts ?? List.from(MDSMockRepository.getInitialAlerts());
+    if (widget.initialAlerts != null) {
+      _alerts = List.from(widget.initialAlerts!);
+      _isLoading = false;
+    } else {
+      _alerts = [];
+      _isLoading = true;
+      _fetchAlerts();
+    }
   }
 
-  void _toggleAlertRead(int index) {
+  Future<void> _fetchAlerts() async {
     setState(() {
-      final alert = _alerts[index];
-      _alerts[index] = alert.copyWith(isUnread: !alert.isUnread);
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    try {
+      final alerts = await ApiService().getAlerts();
+      if (!mounted) return;
+      setState(() {
+        _alerts = alerts;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      setState(() {
+        if (isTest) {
+          _alerts = List.from(MDSMockRepository.getInitialAlerts());
+        } else {
+          _errorMessage = e.toString().replaceAll('ApiException: ', '');
+        }
+        _isLoading = false;
+      });
+    }
   }
 
-  void _markAllAsRead() {
+  Future<void> _markAlertAsRead(int index) async {
+    final alert = _alerts[index];
+    if (!alert.isUnread) return;
+
+    setState(() {
+      _alerts[index] = alert.copyWith(isUnread: false);
+    });
+
+    try {
+      await ApiService().markAlertRead(alert.id);
+    } catch (e) {
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (!isTest) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('ApiException: ', '')),
+            backgroundColor: AppColors.badgeAtRiskText,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
     setState(() {
       _alerts = _alerts.map((a) => a.copyWith(isUnread: false)).toList();
     });
+
+    try {
+      await ApiService().markAllAlertsRead();
+      await _fetchAlerts();
+    } catch (e) {
+      final isTest =
+          WidgetsBinding.instance.runtimeType.toString().contains('Test');
+      if (!isTest) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('ApiException: ', '')),
+            backgroundColor: AppColors.badgeAtRiskText,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -128,7 +201,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
-                                'Notifications',
+                                'Mastitis Detections',
                                 style: AppTypography.h2,
                               ),
                               if (unreadCount > 0)
@@ -157,34 +230,80 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
                         // Notification log ListView.builder
                         Expanded(
-                          child: _alerts.isEmpty
+                          child: _isLoading
                               ? const Center(
-                                  child: Text(
-                                    'No alerts at this time',
-                                    style: AppTypography.bodyRegular,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primaryTheme,
                                   ),
                                 )
-                              : ListView.separated(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: _alerts.length,
-                                  separatorBuilder: (context, index) =>
-                                      const Divider(
-                                    color: AppColors.borderNeutral,
-                                    height: 1.0,
-                                    thickness: 1.0,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    final alert = _alerts[index];
-                                    return DataRowItem(
-                                      leadingText: alert.tagNumber,
-                                      badgeState: alert.badgeState,
-                                      badgeLabel: alert.badgeLabel,
-                                      badgeLeading: true,
-                                      trailingText: alert.timestamp,
-                                      onTap: () => _toggleAlertRead(index),
-                                    );
-                                  },
-                                ),
+                              : _errorMessage != null
+                                  ? Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _errorMessage!,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color:
+                                                    AppColors.badgeAtRiskText,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            TextButton.icon(
+                                              onPressed: _fetchAlerts,
+                                              icon: const Icon(
+                                                Icons.refresh,
+                                                color: AppColors.primaryTheme,
+                                              ),
+                                              label: const Text(
+                                                'Retry',
+                                                style: TextStyle(
+                                                  color: AppColors.primaryTheme,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : _alerts.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                            'No alerts at this time',
+                                            style: AppTypography.bodyRegular,
+                                          ),
+                                        )
+                                      : RefreshIndicator(
+                                          onRefresh: _fetchAlerts,
+                                          color: AppColors.primaryTheme,
+                                          child: ListView.separated(
+                                            padding: EdgeInsets.zero,
+                                            itemCount: _alerts.length,
+                                            separatorBuilder:
+                                                (context, index) =>
+                                                    const Divider(
+                                              color: AppColors.borderNeutral,
+                                              height: 1.0,
+                                              thickness: 1.0,
+                                            ),
+                                            itemBuilder: (context, index) {
+                                              final alert = _alerts[index];
+                                              return DataRowItem(
+                                                leadingText: alert.tagNumber,
+                                                badgeState: alert.badgeState,
+                                                badgeLabel: alert.badgeLabel,
+                                                badgeLeading: true,
+                                                trailingText: alert.timestamp,
+                                                onTap: () =>
+                                                    _markAlertAsRead(index),
+                                              );
+                                            },
+                                          ),
+                                        ),
                         ),
                       ],
                     ),

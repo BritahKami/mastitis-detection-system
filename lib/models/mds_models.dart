@@ -55,8 +55,9 @@ class Cow {
     this.history = const [],
   });
 
-  String get displayTag => tagNumber.startsWith('Tag ') ? tagNumber : 'Tag $tagNumber';
-  String get rawTagId => tagNumber.replaceAll('Tag ', '').trim();
+  String get displayTag => tagNumber;
+  String get rawTagId =>
+      tagNumber.startsWith('Tag ') ? tagNumber.substring(4).trim() : tagNumber;
 
   factory Cow.fromJson(Map<String, dynamic> json) {
     StatusType parseStatus(String? status) {
@@ -72,7 +73,10 @@ class Cow {
       }
     }
 
-    final dynamic historyData = json['history'];
+    final Map<String, dynamic> source =
+        json['cow'] is Map<String, dynamic> ? json['cow'] as Map<String, dynamic> : json;
+
+    final dynamic historyData = source['history'];
     List<TestHistoryRecord> historyList = [];
     if (historyData is List) {
       historyList = historyData
@@ -80,19 +84,20 @@ class Cow {
           .toList();
     }
 
-    final rawTag = json['cow_tag'] ?? json['tagNumber'] ?? '';
-    final idVal = json['cow_id']?.toString() ?? json['id']?.toString() ?? '';
+    final rawTag =
+        source['cow_tag'] ?? source['tag_number'] ?? source['tagNumber'] ?? '';
+    final idVal = source['cow_id']?.toString() ?? source['id']?.toString() ?? '';
 
     return Cow(
       id: idVal,
       tagNumber: rawTag.toString(),
-      breed: json['breed']?.toString() ?? '',
-      age: json['age'] is int
-          ? json['age'] as int
-          : (int.tryParse(json['age']?.toString() ?? '') ?? 0),
+      breed: source['breed']?.toString() ?? '',
+      age: source['age'] is int
+          ? source['age'] as int
+          : (int.tryParse(source['age']?.toString() ?? '') ?? 0),
       status: parseStatus(
-          json['health_status']?.toString() ?? json['status']?.toString()),
-      lastTested: json['lastTested']?.toString() ??
+          source['health_status']?.toString() ?? source['status']?.toString()),
+      lastTested: source['lastTested']?.toString() ??
           (historyList.isNotEmpty ? historyList.first.date : 'Not tested'),
       history: historyList,
     );
@@ -197,14 +202,28 @@ class AlertNotification {
     final statusStr = json['status']?.toString().toLowerCase();
     final isUnread = statusStr == 'unread' || json['isUnread'] == true;
     final tag = json['cow_tag'] ?? json['tagNumber'] ?? 'Unknown Cow';
-    final time = json['send_time'] ?? json['timestamp'] ?? '';
+    final rawTime = json['send_time'] ?? json['timestamp'] ?? '';
+
+    String formattedTimestamp = rawTime.toString();
+    final parsed = DateTime.tryParse(formattedTimestamp);
+    if (parsed != null) {
+      final year = parsed.year.toString().padLeft(4, '0');
+      final month = parsed.month.toString().padLeft(2, '0');
+      final day = parsed.day.toString().padLeft(2, '0');
+      final hour = parsed.hour.toString().padLeft(2, '0');
+      final minute = parsed.minute.toString().padLeft(2, '0');
+      formattedTimestamp = '$year-$month-$day $hour:$minute';
+    } else if (formattedTimestamp.length >= 16 &&
+        RegExp(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}')
+            .hasMatch(formattedTimestamp)) {
+      formattedTimestamp =
+          formattedTimestamp.substring(0, 16).replaceFirst('T', ' ');
+    }
 
     return AlertNotification(
       id: json['alert_id']?.toString() ?? json['id']?.toString() ?? '',
       tagNumber: tag.toString(),
-      timestamp: time.toString().contains('T')
-          ? time.toString().split('T').last.substring(0, 5)
-          : time.toString(),
+      timestamp: formattedTimestamp,
       isUnread: isUnread,
     );
   }
@@ -315,31 +334,31 @@ class MDSMockRepository {
       const AlertNotification(
         id: 'a1',
         tagNumber: 'Tag 102',
-        timestamp: '09/08 14:30',
+        timestamp: '2026-09-08 14:30',
         isUnread: true,
       ),
       const AlertNotification(
         id: 'a2',
         tagNumber: 'Tag 105',
-        timestamp: '09/07 10:15',
+        timestamp: '2026-09-07 10:15',
         isUnread: true,
       ),
       const AlertNotification(
         id: 'a3',
         tagNumber: 'Tag 101',
-        timestamp: '09/05 08:45',
+        timestamp: '2026-09-05 08:45',
         isUnread: false,
       ),
       const AlertNotification(
         id: 'a4',
         tagNumber: 'Tag 104',
-        timestamp: '09/04 16:20',
+        timestamp: '2026-09-04 16:20',
         isUnread: false,
       ),
       const AlertNotification(
         id: 'a5',
         tagNumber: 'Tag 103',
-        timestamp: '09/03 11:00',
+        timestamp: '2026-09-03 11:00',
         isUnread: false,
       ),
     ];

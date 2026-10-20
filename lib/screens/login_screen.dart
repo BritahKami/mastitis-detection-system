@@ -199,9 +199,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Label: Phone / Email
+                        // Label: Email
                         const Text(
-                          'Phone / Email',
+                          'Email',
                           style: TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 13,

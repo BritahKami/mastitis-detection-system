@@ -223,6 +223,7 @@ class ApiService {
         Uri.parse(ApiConstants.cowsEndpoint),
         headers: headers,
         body: jsonEncode({
+          'tag_number': cowTag.trim(),
           'cow_tag': cowTag.trim(),
           'breed': breed.trim(),
           'age': age,
@@ -237,11 +238,14 @@ class ApiService {
         await clearAuth();
         throw const ApiException('Session expired. Please log in again.');
       } else {
-        final message = data['detail'] ?? data['message'] ?? 'Failed to register cow.';
+        final message = data['detail'] ??
+            data['message'] ??
+            'Failed to register cow. Please try again.';
         throw ApiException(message.toString());
       }
     } on SocketException {
-      throw const ApiException('Cannot reach server. Please check your network connection.');
+      throw const ApiException(
+          'Cannot reach server. Please check your network connection.');
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException('Error saving cow: ${e.toString()}');

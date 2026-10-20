@@ -25,6 +25,54 @@ void main() {
       'mds_auth_user_email': 'farmer@dairyfarm.com',
     });
 
+    final mockCows = <Map<String, dynamic>>[
+      {
+        'cow_id': 101,
+        'cow_tag': 'Tag 101',
+        'breed': 'Holstein Friesian',
+        'age': 4,
+        'health_status': 'Healthy',
+        'lastTested': 'Today',
+      },
+      {
+        'cow_id': 102,
+        'cow_tag': 'Tag 102',
+        'breed': 'Jersey',
+        'age': 3,
+        'health_status': 'At Risk',
+        'lastTested': 'Yesterday',
+        'history': [
+          {
+            'date': '2026-09-02',
+            'prediction': 'Mastitis Present',
+          },
+          {
+            'date': '2026-08-20',
+            'prediction': 'Mastitis Absent',
+          },
+        ],
+      },
+    ];
+
+    final mockAlerts = <Map<String, dynamic>>[
+      {
+        'alert_id': 1,
+        'result_id': 10,
+        'cow_tag': 'Tag 102',
+        'message': 'Mastitis Present detected for Tag 102',
+        'status': 'Unread',
+        'send_time': '2026-09-09 10:30',
+      },
+      {
+        'alert_id': 2,
+        'result_id': 11,
+        'cow_tag': 'Tag 101',
+        'message': 'Routine check for Tag 101',
+        'status': 'Read',
+        'send_time': '2026-09-08 14:00',
+      },
+    ];
+
     final mockClient = MockClient((request) async {
       final path = request.url.path;
       final method = request.method;
@@ -67,34 +115,7 @@ void main() {
 
       if (path == '/api/cows' && method == 'GET') {
         return http.Response(
-          jsonEncode([
-            {
-              'cow_id': 101,
-              'cow_tag': 'Tag 101',
-              'breed': 'Holstein Friesian',
-              'age': 4,
-              'health_status': 'Healthy',
-              'lastTested': 'Today',
-            },
-            {
-              'cow_id': 102,
-              'cow_tag': 'Tag 102',
-              'breed': 'Jersey',
-              'age': 3,
-              'health_status': 'At Risk',
-              'lastTested': 'Yesterday',
-              'history': [
-                {
-                  'date': '2026-09-02',
-                  'prediction': 'Mastitis Present',
-                },
-                {
-                  'date': '2026-08-20',
-                  'prediction': 'Mastitis Absent',
-                },
-              ],
-            },
-          ]),
+          jsonEncode(mockCows),
           200,
           headers: {'content-type': 'application/json'},
         );
@@ -102,18 +123,21 @@ void main() {
 
       if (path == '/api/cows' && method == 'POST') {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
-        final tag = body['cow_tag'] ?? 'Tag 999';
+        final tag = body['tag_number'] ?? body['cow_tag'] ?? 'Tag 999';
         final breed = body['breed'] ?? 'Jersey Special';
         final age = body['age'] ?? 4;
+        final newCowJson = {
+          'cow_id': 999,
+          'cow_tag': tag,
+          'tag_number': tag,
+          'breed': breed,
+          'age': age,
+          'health_status': 'Healthy',
+          'lastTested': 'Today',
+        };
+        mockCows.insert(0, newCowJson);
         return http.Response(
-          jsonEncode({
-            'cow_id': 999,
-            'cow_tag': tag,
-            'breed': breed,
-            'age': age,
-            'health_status': 'Healthy',
-            'lastTested': 'Today',
-          }),
+          jsonEncode(newCowJson),
           201,
           headers: {'content-type': 'application/json'},
         );
@@ -134,6 +158,48 @@ void main() {
                 'prediction': 'Mastitis Present',
               }
             ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/alerts' && method == 'GET') {
+        return http.Response(
+          jsonEncode(mockAlerts),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path.contains('/api/alerts/') &&
+          path.endsWith('/read') &&
+          method == 'PUT') {
+        final segments = path.split('/');
+        final idStr = segments[segments.length - 2];
+        for (var i = 0; i < mockAlerts.length; i++) {
+          if (mockAlerts[i]['alert_id'].toString() == idStr) {
+            mockAlerts[i]['status'] = 'Read';
+          }
+        }
+        return http.Response(
+          jsonEncode({
+            'message': 'Alert marked as read',
+            'alert_id': int.tryParse(idStr) ?? 1
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/alerts/mark-all-read' && method == 'PUT') {
+        for (var i = 0; i < mockAlerts.length; i++) {
+          mockAlerts[i]['status'] = 'Read';
+        }
+        return http.Response(
+          jsonEncode({
+            'message': 'All alerts marked as read',
+            'updated_count': mockAlerts.length
           }),
           200,
           headers: {'content-type': 'application/json'},
@@ -265,6 +331,62 @@ void main() {
       expect(find.text('09/01'), findsOneWidget);
     });
 
+    test(
+        'AlertNotification.fromJson formats timestamp as yyyy-MM-dd HH:mm hiding seconds',
+        () {
+      final alertWithSeconds = AlertNotification.fromJson({
+        'alert_id': 10,
+        'cow_tag': 'Tag 102',
+        'send_time': '2026-10-15 19:55:23',
+        'status': 'Unread',
+      });
+      expect(alertWithSeconds.timestamp, '2026-10-15 19:55');
+
+      final alertIso = AlertNotification.fromJson({
+        'alert_id': 11,
+        'cow_tag': 'COW-001',
+        'send_time': '2026-10-15T19:55:00',
+        'status': 'Read',
+      });
+      expect(alertIso.timestamp, '2026-10-15 19:55');
+    });
+
+    testWidgets(
+        'DataRowItem in alert mode cleanly accommodates yyyy-MM-dd HH:mm timestamp on 360 width',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      FlutterErrorDetails? caughtDetails;
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) => caughtDetails = details;
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: DataRowItem(
+              leadingText: 'Tag 102',
+              badgeState: StatusType.atRisk,
+              badgeLabel: 'Unread',
+              badgeLeading: true,
+              trailingText: '2026-10-15 19:55',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      FlutterError.onError = originalOnError;
+
+      expect(caughtDetails, isNull);
+      expect(find.text('Unread'), findsOneWidget);
+      expect(find.text('Tag 102'), findsOneWidget);
+      expect(find.text('2026-10-15 19:55'), findsOneWidget);
+    });
+
     testWidgets('BottomNavBar highlights active tab with #215433 background',
         (tester) async {
       int selectedTab = 0;
@@ -298,7 +420,7 @@ void main() {
       // Screen 1: Auth/Login UI verification
       expect(find.text('Welcome back'), findsOneWidget);
       expect(find.text('Sign in to your MDS account'), findsOneWidget);
-      expect(find.text('Phone / Email'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
       expect(find.text('Password'), findsOneWidget);
       expect(find.text('Log in'), findsOneWidget);
       expect(find.text('Forgot password?'), findsOneWidget);
@@ -390,7 +512,7 @@ void main() {
       // On Screen 5: Alerts
       expect(find.widgetWithText(AppHeader, 'Alerts'), findsOneWidget);
       expect(find.widgetWithText(BottomNavBar, 'Alerts'), findsOneWidget);
-      expect(find.text('Notifications'), findsOneWidget);
+      expect(find.text('Mastitis Detections'), findsOneWidget);
       expect(find.text('Unread'), findsWidgets);
 
       // Tap Dash tab to switch back
@@ -562,7 +684,7 @@ void main() {
 
       // Inputs: Contains exactly three CustomTextField inputs
       expect(find.byType(CustomTextField), findsNWidgets(3));
-      expect(find.text('Tag Number (e.g. Tag 106)'), findsOneWidget);
+      expect(find.text('Tag Number'), findsOneWidget);
       expect(find.text('Breed'), findsOneWidget);
       expect(find.text('Age (years)'), findsOneWidget);
 
@@ -592,7 +714,7 @@ void main() {
 
       // Enter a unique tag number
       await tester.enterText(
-          find.widgetWithText(CustomTextField, 'Tag Number (e.g. Tag 106)'),
+          find.widgetWithText(CustomTextField, 'Tag Number'),
           'Tag 999');
       await tester.enterText(
           find.widgetWithText(CustomTextField, 'Breed'), 'Jersey Special');

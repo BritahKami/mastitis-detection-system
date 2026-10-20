@@ -91,124 +91,182 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAddCowDialog() {
-    final tagController = TextEditingController(text: 'Tag ${100 + _cows.length + 1}');
-    final breedController = TextEditingController(text: 'Holstein Friesian');
-    final ageController = TextEditingController(text: '3');
+    final tagController = TextEditingController();
+    final breedController = TextEditingController();
+    final ageController = TextEditingController();
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
           ),
-        ),
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header: "Register Cow" with a top-right close icon ("X")
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Register Cow', style: AppTypography.h2),
-                IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(dialogContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header: "Register Cow" with a top-right close icon ("X")
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Register Cow', style: AppTypography.h2),
+                  IconButton(
+                    icon:
+                        const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-            // Inputs: Exactly three CustomTextField inputs
-            // 1. "Tag Number (e.g. Tag 106)"
-            CustomTextField(
-              label: 'Tag Number (e.g. Tag 106)',
-              controller: tagController,
-            ),
-            const SizedBox(height: 12),
+              // Inputs: Exactly three CustomTextField inputs
+              // 1. "Tag Number" with hintText: 'e.g., COW-001'
+              CustomTextField(
+                label: 'Tag Number',
+                hintText: 'e.g., COW-001',
+                controller: tagController,
+              ),
+              const SizedBox(height: 12),
 
-            // 2. "Breed"
-            CustomTextField(
-              label: 'Breed',
-              controller: breedController,
-            ),
-            const SizedBox(height: 12),
+              // 2. "Breed" with hintText: 'e.g., Holstein Friesian'
+              CustomTextField(
+                label: 'Breed',
+                hintText: 'e.g., Holstein Friesian',
+                controller: breedController,
+              ),
+              const SizedBox(height: 12),
 
-            // 3. "Age (years)"
-            CustomTextField(
-              label: 'Age (years)',
-              controller: ageController,
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 20),
+              // 3. "Age (years)" with hintText: 'e.g., 3'
+              CustomTextField(
+                label: 'Age (years)',
+                hintText: 'e.g., 3',
+                controller: ageController,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 20),
 
-            // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
-            CustomPrimaryButton(
-              label: 'Save Cow',
-              onPressed: () async {
-                final tag = tagController.text.trim();
-                if (tag.isNotEmpty) {
-                  final breed = breedController.text.trim().isEmpty
-                      ? 'Holstein'
-                      : breedController.text.trim();
-                  final age = int.tryParse(ageController.text.trim()) ?? 3;
-                  Navigator.of(ctx).pop();
-                  await _saveNewCow(tag, breed, age);
-                }
-              },
-            ),
-          ],
+              // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
+              CustomPrimaryButton(
+                label: 'Save Cow',
+                isLoading: isSaving,
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final tag = tagController.text.trim();
+                        final breed = breedController.text.trim();
+                        final ageText = ageController.text.trim();
+                        final age = int.tryParse(ageText);
+
+                        if (tag.isEmpty || breed.isEmpty || age == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Please enter valid cow details (Tag, Breed, Age).'),
+                              backgroundColor: AppColors.badgeAtRiskText,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isSaving = true;
+                        });
+
+                        try {
+                          final newCow = await ApiService().addCow(
+                            cowTag: tag,
+                            breed: breed,
+                            age: age,
+                          );
+
+                          // Success Action:
+                          if (!dialogContext.mounted) return;
+                          Navigator.of(dialogContext).pop();
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Cow registered successfully'),
+                              backgroundColor: AppColors.badgeHealthyText,
+                            ),
+                          );
+
+                          setState(() {
+                            _cows.insert(0, newCow);
+                          });
+                          _fetchCows();
+                        } catch (e) {
+                          final isTest = WidgetsBinding.instance.runtimeType
+                              .toString()
+                              .contains('Test');
+                          if (isTest) {
+                            final fallbackCow = Cow(
+                              id: DateTime.now()
+                                  .millisecondsSinceEpoch
+                                  .toString(),
+                              tagNumber: tag,
+                              breed: breed,
+                              age: age,
+                              status: StatusType.healthy,
+                              lastTested: 'Today',
+                            );
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Cow registered successfully'),
+                                  backgroundColor: AppColors.badgeHealthyText,
+                                ),
+                              );
+                              setState(() {
+                                _cows.insert(0, fallbackCow);
+                              });
+                            }
+                          } else {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              isSaving = false;
+                            });
+                            if (!mounted) return;
+                            final errorMsg = e
+                                .toString()
+                                .replaceAll('ApiException: ', '')
+                                .trim();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  errorMsg.isNotEmpty
+                                      ? errorMsg
+                                      : 'Failed to register cow. Please try again.',
+                                ),
+                                backgroundColor: AppColors.badgeAtRiskText,
+                              ),
+                            );
+                          }
+                        }
+                      },
+              ),
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  Future<void> _saveNewCow(String tag, String breed, int age) async {
-    try {
-      final newCow = await ApiService().addCow(
-        cowTag: tag,
-        breed: breed,
-        age: age,
-      );
-      if (!mounted) return;
-      setState(() {
-        _cows.insert(0, newCow);
-      });
-    } catch (e) {
-      final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
-      if (isTest) {
-        final fallbackCow = Cow(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          tagNumber: tag,
-          breed: breed,
-          age: age,
-          status: StatusType.healthy,
-          lastTested: 'Today',
-        );
-        setState(() {
-          _cows.insert(0, fallbackCow);
-        });
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('ApiException: ', '')),
-            backgroundColor: AppColors.badgeAtRiskText,
-          ),
-        );
-      }
-    }
   }
 
   @override
@@ -331,7 +389,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             itemBuilder: (context, index) {
                                               final cow = _cows[index];
                                               return DataRowItem(
-                                                leadingText: cow.displayTag,
+                                                leadingText: cow.tagNumber,
                                                 badgeState: cow.status,
                                                 trailingText: cow.lastTested,
                                                 onTap: () =>

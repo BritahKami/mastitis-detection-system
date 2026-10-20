@@ -60,29 +60,26 @@ class DataRowItem extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: 84,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: badgeWidget,
-                  ),
-                ),
+                badgeWidget,
                 Expanded(
-                  child: Text(
-                    leadingText,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.listRowTitle,
-                  ),
-                ),
-                SizedBox(
-                  width: 84,
-                  child: Align(
-                    alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Text(
-                      trailingText,
-                      style: AppTypography.bodyRegular,
+                      leadingText,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.listRowTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                ),
+                Text(
+                  trailingText,
+                  style: AppTypography.bodyRegular.copyWith(
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             )
