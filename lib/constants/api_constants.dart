@@ -3,10 +3,15 @@ class ApiConstants {
   ApiConstants._();
 
   /// API Base URL configured for physical phone & Android emulator connectivity via hotspot
-  static const String baseUrl = 'http://192.168.4.41:8000';
+  static const String baseUrl = 'http://192.168.4.165:8000';
 
   // Authentication endpoints
   static const String loginEndpoint = '$baseUrl/api/auth/login';
+  static const String loginStep1Endpoint = '$baseUrl/api/auth/login-step1';
+  static const String loginStep2Endpoint = '$baseUrl/api/auth/login-step2';
+  static const String forgotPasswordEndpoint = '$baseUrl/api/auth/forgot-password';
+  static const String verifyResetCodeEndpoint = '$baseUrl/api/auth/verify-reset-code';
+  static const String resetPasswordEndpoint = '$baseUrl/api/auth/reset-password';
   static const String registerEndpoint = '$baseUrl/api/auth/register';
   static const String profileEndpoint = '$baseUrl/api/auth/profile';
 

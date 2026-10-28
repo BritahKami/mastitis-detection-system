@@ -88,6 +88,80 @@ void main() {
         );
       }
 
+      if (path == '/api/auth/login-step1') {
+        return http.Response(
+          jsonEncode({
+            'message': 'A 6-digit verification code has been sent to your email.',
+            'email': 'farmer@dairyfarm.com',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/auth/login-step2') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        if (body['code'] == '123456') {
+          return http.Response(
+            jsonEncode({
+              'access_token': 'mock_token',
+              'token_type': 'bearer',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else {
+          return http.Response(
+            jsonEncode({'detail': 'Invalid verification code.'}),
+            400,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      }
+
+      if (path == '/api/auth/forgot-password') {
+        return http.Response(
+          jsonEncode({
+            'message': 'A verification code has been sent to your email.',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (path == '/api/auth/verify-reset-code') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        if (body['code'] == '123456') {
+          return http.Response(
+            jsonEncode({'message': 'Verification code is valid.'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else {
+          return http.Response(
+            jsonEncode({'detail': 'Invalid verification code.'}),
+            400,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      }
+
+      if (path == '/api/auth/reset-password') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        if ((body['new_password'] as String).length < 8) {
+          return http.Response(
+            jsonEncode({'detail': 'New password must be at least 8 characters long.'}),
+            400,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode({'message': 'Password reset successfully. You can now log in.'}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
       if (path == '/api/auth/register') {
         return http.Response(
           jsonEncode({
@@ -132,7 +206,7 @@ void main() {
           'tag_number': tag,
           'breed': breed,
           'age': age,
-          'health_status': 'Healthy',
+          'health_status': 'Pending',
           'lastTested': 'Today',
         };
         mockCows.insert(0, newCowJson);
@@ -411,8 +485,23 @@ void main() {
     });
   });
 
+Future<void> performLoginFlow(WidgetTester tester) async {
+  await tester.tap(find.text('Log in'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pumpAndSettle();
+
+  if (find.text('Two-Factor Verification').evaluate().isNotEmpty) {
+    await tester.enterText(find.byType(TextFormField).first, '123456');
+    await tester.tap(find.text('Verify & Log in'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+  }
+}
+
   group('Full Application End-to-End Workflow & Navigation', () {
-    testWidgets('Screen 1 LoginScreen loads and navigates to Dashboard',
+    testWidgets('Screen 1 LoginScreen loads and navigates to Dashboard via 2FA',
         (tester) async {
       await tester.pumpWidget(const MastitisDetectionApp());
       await tester.pumpAndSettle();
@@ -426,8 +515,18 @@ void main() {
       expect(find.text('Forgot password?'), findsOneWidget);
       expect(find.text('Register'), findsOneWidget);
 
-      // Tap Log in
+      // Tap Log in dispatches 2FA OTP and navigates to LoginVerificationScreen
       await tester.tap(find.text('Log in'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Two-Factor Verification'), findsOneWidget);
+      expect(find.textContaining('farmer@dairyfarm.com'), findsOneWidget);
+
+      // Enter valid 6-digit OTP code and submit
+      await tester.enterText(find.byType(TextFormField).first, '123456');
+      await tester.tap(find.text('Verify & Log in'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
@@ -447,11 +546,8 @@ void main() {
       await tester.pumpWidget(const MastitisDetectionApp());
       await tester.pumpAndSettle();
 
-      // Log in to dashboard
-      await tester.tap(find.text('Log in'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
+      // Log in to dashboard via 2FA
+      await performLoginFlow(tester);
 
       // Tap on Tag 102 to open Cow Profile
       await tester.tap(find.text('Tag 102'));
@@ -497,10 +593,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Log in
-      await tester.tap(find.text('Log in'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
+      await performLoginFlow(tester);
 
       // On Dashboard
       expect(find.text('My cows'), findsOneWidget);
@@ -643,10 +736,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Log in
-      await tester.tap(find.text('Log in'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
+      await performLoginFlow(tester);
 
       // Switch to Profile tab
       await tester.tap(find.text('Profile'));
@@ -660,6 +750,121 @@ void main() {
       // Expected: LoginScreen is the new root
       expect(find.text('Welcome back'), findsOneWidget);
       expect(Navigator.of(tester.element(find.text('Welcome back'))).canPop(), isFalse);
+    });
+  });
+
+  group('MDS Two-Factor Login Workflow (2FA)', () {
+    testWidgets('Invalid OTP code shows error message', (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Log in'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Two-Factor Verification'), findsOneWidget);
+
+      // Enter invalid OTP
+      await tester.enterText(find.byType(TextFormField).first, '999999');
+      await tester.tap(find.text('Verify & Log in'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invalid verification code.'), findsOneWidget);
+    });
+
+    testWidgets('Resend code dispatches fresh code notification', (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Log in'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Resend Code'), findsOneWidget);
+      await tester.tap(find.text('Resend Code'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A fresh verification code has been dispatched to your email.'), findsOneWidget);
+    });
+  });
+
+  group('MDS Password Reset & Email Verification Workflow', () {
+    testWidgets('Forgot password flow from Login to ResetPasswordScreen and LoginScreen', (tester) async {
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // Tap Forgot password? with empty input opens dialog
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset Password'), findsOneWidget);
+      expect(find.text('Enter your registered email address to receive a 6-digit verification code.'), findsOneWidget);
+
+      // Enter email in dialog and send code
+      final dialogEmailField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextFormField),
+      );
+      await tester.enterText(dialogEmailField, 'farmer@dairyfarm.com');
+      await tester.tap(find.text('Send Code'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // On VerifyResetCodeScreen
+      expect(find.text('Verify Code'), findsNWidgets(2));
+      expect(find.textContaining('farmer@dairyfarm.com'), findsOneWidget);
+
+      // Enter code 123456
+      await tester.enterText(find.byType(TextFormField).first, '123456');
+      await tester.tap(find.widgetWithText(CustomPrimaryButton, 'Verify Code'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // On ResetPasswordScreen
+      expect(find.text('Create New Password'), findsOneWidget);
+      expect(find.text('New Password'), findsOneWidget);
+      expect(find.text('Confirm New Password'), findsOneWidget);
+
+      // Enter passwords that don't match
+      final inputs = find.byType(TextFormField);
+      await tester.enterText(inputs.at(0), 'newpassword123');
+      await tester.enterText(inputs.at(1), 'mismatch123');
+      await tester.tap(find.text('Reset Password'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Passwords do not match. Please verify both fields.'), findsOneWidget);
+
+      // Enter password with less than 8 characters
+      await tester.enterText(inputs.at(0), 'short');
+      await tester.enterText(inputs.at(1), 'short');
+      await tester.tap(find.text('Reset Password'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Password must be at least 8 characters long.'), findsOneWidget);
+
+      // Enter valid matching passwords
+      await tester.enterText(inputs.at(0), 'newpassword123');
+      await tester.enterText(inputs.at(1), 'newpassword123');
+      await tester.tap(find.text('Reset Password'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Success dialog shown
+      expect(find.text('Password Reset Successful'), findsOneWidget);
+      await tester.tap(find.text('Log in now'));
+      await tester.pumpAndSettle();
+
+      // Returned to LoginScreen
+      expect(find.text('Welcome back'), findsOneWidget);
     });
   });
 

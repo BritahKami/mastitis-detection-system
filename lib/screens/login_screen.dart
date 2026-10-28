@@ -3,6 +3,8 @@ import '../constants/theme_constants.dart';
 import '../widgets/custom_primary_button.dart';
 import 'main_shell_screen.dart';
 import 'register_screen.dart';
+import 'login_verification_screen.dart';
+import 'verify_reset_code_screen.dart';
 
 import '../services/api_service.dart';
 
@@ -12,10 +14,10 @@ import '../services/api_service.dart';
 /// - Layout: Centered column form layout.
 /// - Header: "Welcome back" (Primary Theme color #215433), Subtitle: "Sign in to your MDS account".
 /// - Inputs: Two TextFormField widgets wrapped in a bordered container with a subtle background.
-///   Labels: "Phone / Email" and "Password" (obscured).
-/// - Actions: CustomPrimaryButton ("Log in"), centered TextButton ("Forgot password?", green text),
+///   Labels: "Email" and "Password" (obscured).
+/// - Actions: CustomPrimaryButton ("Log in" triggers 2FA Step 1), centered TextButton ("Forgot password?", green text),
 ///   and a secondary CustomPrimaryButton ("Register").
-/// - Routing: Tapping "Log in" transitions to Screen 2 (Dashboard).
+/// - Routing: Tapping "Log in" dispatches 2FA OTP and navigates to LoginVerificationScreen.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -61,14 +63,49 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await ApiService().login(effectiveEmail, effectivePassword);
+      await ApiService().loginStep1(effectiveEmail, effectivePassword);
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
+
+      Navigator.of(context).push(
         MaterialPageRoute(
-          settings: const RouteSettings(name: '/dashboard'),
-          builder: (context) => const MainShellScreen(),
+          settings: const RouteSettings(name: '/login-verification'),
+          builder: (context) => LoginVerificationScreen(
+            email: effectiveEmail,
+            password: effectivePassword,
+          ),
         ),
-        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('ApiException: ', '')),
+          backgroundColor: AppColors.badgeAtRiskText,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendForgotPassword(String email) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await ApiService().forgotPassword(email);
+      if (!mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          settings: const RouteSettings(name: '/verify-reset-code'),
+          builder: (context) => VerifyResetCodeScreen(email: email),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -88,30 +125,109 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
+    final emailText = _phoneEmailController.text.trim();
+
+    // If email is already entered on screen, proceed directly
+    if (emailText.isNotEmpty) {
+      _sendForgotPassword(emailText);
+      return;
+    }
+
+    // Otherwise prompt user to enter their email in a dialog
+    final emailDialogController = TextEditingController();
+    bool isSubmittingDialog = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.container),
-        ),
-        title: const Text('Reset Password', style: AppTypography.h2),
-        content: const Text(
-          'Password reset instructions have been dispatched to your registered phone/email.',
-          style: AppTypography.bodyRegularDark,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              'OK',
-              style: TextStyle(
-                color: AppColors.primaryTheme,
-                fontWeight: FontWeight.w600,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.container),
+          ),
+          title: const Text('Reset Password', style: AppTypography.h2),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter your registered email address to receive a 6-digit verification code.',
+                style: AppTypography.bodyRegularDark,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: emailDialogController,
+                keyboardType: TextInputType.emailAddress,
+                style: AppTypography.bodyRegularDark,
+                decoration: InputDecoration(
+                  hintText: 'Enter your email',
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.backgroundSurface,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: const BorderSide(
+                      color: AppColors.borderNeutral,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: const BorderSide(
+                      color: AppColors.borderNeutral,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: const BorderSide(
+                      color: AppColors.primaryTheme,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmittingDialog ? null : () => Navigator.of(ctx).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: isSubmittingDialog
+                  ? null
+                  : () async {
+                      final inputEmail = emailDialogController.text.trim();
+                      if (inputEmail.isEmpty) {
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      _sendForgotPassword(inputEmail);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryTheme,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              child: const Text('Send Code'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS Cow (
     cow_tag VARCHAR(20) NOT NULL,
     breed VARCHAR(50) NOT NULL,
     age INT NOT NULL,
-    health_status ENUM('Healthy', 'At Risk', 'Pending') NOT NULL DEFAULT 'Healthy',
+    health_status ENUM('Healthy', 'At Risk', 'Pending') NOT NULL DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmer_id) REFERENCES Farmer(farmer_id) ON DELETE CASCADE,
     INDEX idx_cow_farmer (farmer_id),
@@ -72,4 +72,16 @@ CREATE TABLE IF NOT EXISTS Alert (
     FOREIGN KEY (farmer_id) REFERENCES Farmer(farmer_id) ON DELETE CASCADE,
     INDEX idx_alert_farmer (farmer_id),
     INDEX idx_alert_status (status)
+) ENGINE=InnoDB;
+
+-- 6. OTP Codes Table (for 2FA and Password Reset)
+CREATE TABLE IF NOT EXISTS otp_codes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code VARCHAR(6) NOT NULL,
+    purpose ENUM('login', 'reset_password') NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email_purpose (email, purpose)
 ) ENGINE=InnoDB;

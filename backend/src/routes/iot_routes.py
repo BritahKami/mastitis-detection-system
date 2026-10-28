@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status
+from src.services.session_service import session_manager
 from sqlalchemy.orm import Session
 from src.config.database import get_db
 from src.models.schemas import (
@@ -22,12 +23,27 @@ def ingest_sensor_reading(
 ):
     """
     Steps 3, 4, 5 of Asynchronous Testing Workflow:
-    Ingests milk telemetry from the physical ESP32 sensing module:
-    1. Saves readings into the Sensor_Reading table.
-    2. Runs in-memory Random Forest ML inference in exact feature order:
-       [temperature, pH, electrical_conductivity].
-    3. Saves output into Detection_Result table linked to reading_id.
-    4. Updates Cow health_status to 'At Risk' (if Mastitis Present) or 'Healthy' (if Absent).
-    5. Dispatches an unread Alert entry if Mastitis is detected.
+    1. Checks for an active 3-minute test session lock set by 'Select cow to test'.
+    2. Ingests milk telemetry from the physical ESP32 sensing module.
+    3. Saves readings into Sensor_Reading bound to the active cow_id.
+    4. Runs Random Forest ML inference: [temperature, pH, electrical_conductivity].
+    5. Saves output into Detection_Result table.
+    6. Updates Cow health_status to 'At Risk' (if Present) or 'Healthy' (if Absent).
+    7. Dispatches an unread Alert entry if Mastitis is detected.
+    8. Clears the session lock.
     """
-    return IoTController.process_sensor_reading(payload, db)
+    # 1. Retrieve active cow_id from 3-minute session lock (returns None if expired or no lock)
+    active_cow_id = session_manager.get_active_cow_id()
+
+    # 2. Delegate to controller with active_cow_id binding
+    response = IoTController.process_sensor_reading(
+        payload=payload,
+        db=db,
+        active_cow_id=active_cow_id
+    )
+
+    # 3. Clear session lock after successful processing
+    if active_cow_id:
+        session_manager.clear_session()
+
+    return response

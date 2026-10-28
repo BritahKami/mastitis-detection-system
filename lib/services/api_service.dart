@@ -103,6 +103,170 @@ class ApiService {
     }
   }
 
+  /// Two-Factor Login Step 1: Validates credentials and requests email OTP
+  /// Calls POST /api/auth/login-step1
+  Future<String> loginStep1(String email, String password) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(ApiConstants.loginStep1Endpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'password': password,
+        }),
+      );
+
+      final data = _parseResponseBody(response);
+
+      if (response.statusCode == 200) {
+        return data['message']?.toString() ?? 'Verification code sent to your email.';
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Login failed. Please verify your credentials.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Unable to connect to server at ${ApiConstants.baseUrl}. Please check your connection.',
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Login request failed: ${e.toString()}');
+    }
+  }
+
+  /// Two-Factor Login Step 2: Verifies OTP code and retrieves JWT access token
+  /// Calls POST /api/auth/login-step2
+  Future<String> loginStep2(String email, String code) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(ApiConstants.loginStep2Endpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
+        }),
+      );
+
+      final data = _parseResponseBody(response);
+
+      if (response.statusCode == 200) {
+        final token = data['access_token']?.toString();
+        if (token == null || token.isEmpty) {
+          throw const ApiException('Invalid authentication response from server.');
+        }
+
+        await saveToken(token);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(ApiConstants.authUserEmailKey, email.trim().toLowerCase());
+
+        return token;
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Verification failed.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Unable to connect to server at ${ApiConstants.baseUrl}. Please check your connection.',
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Verification request failed: ${e.toString()}');
+    }
+  }
+
+  /// Initiates password reset by sending 6-digit OTP to user's registered email
+  /// Calls POST /api/auth/forgot-password
+  Future<String> forgotPassword(String email) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(ApiConstants.forgotPasswordEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+        }),
+      );
+
+      final data = _parseResponseBody(response);
+
+      if (response.statusCode == 200) {
+        return data['message']?.toString() ?? 'Verification code sent to your email.';
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Failed to request password reset.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Unable to connect to server at ${ApiConstants.baseUrl}. Please check your connection.',
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Forgot password request failed: ${e.toString()}');
+    }
+  }
+
+  /// Verifies password reset OTP code
+  /// Calls POST /api/auth/verify-reset-code
+  Future<void> verifyResetCode(String email, String code) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(ApiConstants.verifyResetCodeEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
+        }),
+      );
+
+      final data = _parseResponseBody(response);
+
+      if (response.statusCode == 200) {
+        return;
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Invalid or expired verification code.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Unable to connect to server at ${ApiConstants.baseUrl}. Please check your connection.',
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Verification request failed: ${e.toString()}');
+    }
+  }
+
+  /// Resets password with verified OTP code and new password
+  /// Calls POST /api/auth/reset-password
+  Future<String> resetPassword(String email, String code, String newPassword) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(ApiConstants.resetPasswordEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
+          'new_password': newPassword,
+        }),
+      );
+
+      final data = _parseResponseBody(response);
+
+      if (response.statusCode == 200) {
+        return data['message']?.toString() ?? 'Password reset successfully.';
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Failed to reset password.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Unable to connect to server at ${ApiConstants.baseUrl}. Please check your connection.',
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Reset password request failed: ${e.toString()}');
+    }
+  }
+
   /// Registers a new farmer account via POST /api/auth/register
   Future<void> register({
     required String firstName,
@@ -227,6 +391,8 @@ class ApiService {
           'cow_tag': cowTag.trim(),
           'breed': breed.trim(),
           'age': age,
+          'health_status': 'Pending',
+        
         }),
       );
 

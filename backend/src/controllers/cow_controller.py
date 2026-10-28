@@ -31,7 +31,7 @@ class CowController:
             cow_tag=payload.cow_tag.strip(),
             breed=payload.breed.strip(),
             age=payload.age,
-            health_status="Healthy"
+            health_status="Pending"
         )
         db.add(new_cow)
         db.commit()

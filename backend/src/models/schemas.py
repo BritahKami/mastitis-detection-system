@@ -27,6 +27,31 @@ class FarmerLoginRequest(BaseModel):
     password: str = Field(..., description="Account password")
 
 
+class LoginStep1Response(BaseModel):
+    message: str
+    email: str
+
+
+class LoginStep2Request(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address")
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address to receive reset code")
+
+
+class VerifyResetCodeRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address")
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address")
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+    new_password: str = Field(..., min_length=8, max_length=100, description="New password (min 8 characters)")
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -51,6 +76,7 @@ class CowRegisterRequest(BaseModel):
     cow_tag: str = Field(..., min_length=1, max_length=20, description="Unique tag/ear tag number")
     breed: str = Field(..., min_length=1, max_length=50, description="Breed of the cow")
     age: int = Field(..., ge=0, le=30, description="Age in years")
+    health_status: str = Field(default="Pending", description="Initial health status")
 
 
 class CowResponse(BaseModel):
@@ -59,7 +85,7 @@ class CowResponse(BaseModel):
     cow_tag: str
     breed: str
     age: int
-    health_status: str
+    health_status: str = "Pending"
 
     class Config:
         from_attributes = True
@@ -133,7 +159,7 @@ class TestPollCompletedResponse(BaseModel):
 
 class IoTSensorReadingRequest(BaseModel):
     cow_id: int = Field(..., gt=0, description="Target cow ID undergoing test")
-    temperature: float = Field(..., ge=30.0, le=45.0, description="Milk temperature in Celsius")
+    temperature: float = Field(..., ge=0.0, le=45.0, description="Milk temperature in Celsius")
     pH: float = Field(..., ge=4.0, le=10.0, description="Milk pH value")
     electrical_conductivity: float = Field(..., ge=1.0, le=15.0, description="Conductivity in mS/cm")
 

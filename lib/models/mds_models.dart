@@ -59,17 +59,32 @@ class Cow {
   String get rawTagId =>
       tagNumber.startsWith('Tag ') ? tagNumber.substring(4).trim() : tagNumber;
 
+  // factory Cow.fromJson(Map<String, dynamic> json) {
+  //   StatusType parseStatus(String? status) {
+  //     switch (status?.toLowerCase()) {
+  //       case 'at risk':
+  //       case 'atrisk':
+  //         return StatusType.atRisk;
+  //       case 'pending':
+  //         return StatusType.pending;
+  //       case 'healthy':
+  //       default:
+  //         return StatusType.healthy;
+  //     }
+  //   }
   factory Cow.fromJson(Map<String, dynamic> json) {
     StatusType parseStatus(String? status) {
-      switch (status?.toLowerCase()) {
+      switch (status?.toLowerCase().trim()) {
         case 'at risk':
         case 'atrisk':
+        case 'mastitis present':
           return StatusType.atRisk;
-        case 'pending':
-          return StatusType.pending;
         case 'healthy':
-        default:
+        case 'mastitis absent':
           return StatusType.healthy;
+        case 'pending':
+        default:
+          return StatusType.pending; // Default untested cows to Pending
       }
     }
 
@@ -142,6 +157,50 @@ class DetectionResult {
     required this.status,
     required this.predictionLabel,
   });
+
+  factory DetectionResult.fromJson(Map<String, dynamic> json) {
+    final String prediction =
+        json['prediction']?.toString() ?? json['diagnosis']?.toString() ?? 'Mastitis Absent';
+
+    final bool isMastitisPresent = prediction.toLowerCase().contains('present') ||
+        json['health_status']?.toString().toLowerCase() == 'at risk';
+
+    final double temp = (json['temperature'] as num? ?? 38.5).toDouble();
+    final double phVal = (json['pH'] as num? ?? json['ph'] as num? ?? 6.65).toDouble();
+    final double condVal =
+        (json['electrical_conductivity'] as num? ?? json['conductivity'] as num? ?? 4.80).toDouble();
+
+    String rawTime =
+        json['detection_time']?.toString() ?? json['reading_time']?.toString() ?? json['timestamp']?.toString() ?? '';
+    String formattedTime = rawTime;
+
+    if (rawTime.isNotEmpty) {
+      final parsed = DateTime.tryParse(rawTime);
+      if (parsed != null) {
+        final year = parsed.year.toString().padLeft(4, '0');
+        final month = parsed.month.toString().padLeft(2, '0');
+        final day = parsed.day.toString().padLeft(2, '0');
+        final hour = parsed.hour.toString().padLeft(2, '0');
+        final minute = parsed.minute.toString().padLeft(2, '0');
+        formattedTime = '$year-$month-$day $hour:$minute';
+      }
+    }
+
+    final String tag = json['cow_tag']?.toString() ??
+        json['tag_number']?.toString() ??
+        json['tagNumber']?.toString() ??
+        '';
+
+    return DetectionResult(
+      tagNumber: tag,
+      timestamp: formattedTime.isEmpty ? 'Just now' : formattedTime,
+      temperature: temp,
+      pH: phVal,
+      conductivity: condVal,
+      status: isMastitisPresent ? StatusType.atRisk : StatusType.healthy,
+      predictionLabel: prediction,
+    );
+  }
 
   static DetectionResult sampleForCow(String tagNumber) {
     return DetectionResult(

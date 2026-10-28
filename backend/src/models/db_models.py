@@ -6,7 +6,9 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum,
-    text
+    Boolean,
+    text,
+    func
 )
 from sqlalchemy.orm import relationship
 from src.config.database import Base
@@ -43,8 +45,8 @@ class Cow(Base):
     health_status = Column(
         Enum("Healthy", "At Risk", "Pending", name="health_status_enum"),
         nullable=False,
-        default="Healthy",
-        server_default=text("'Healthy'")
+        default="Pending",
+        server_default=text("'Pending'")
     )
 
     # Relationships
@@ -123,3 +125,21 @@ class Alert(Base):
     # Relationships
     farmer = relationship("Farmer", back_populates="alerts")
     detection_result = relationship("DetectionResult", back_populates="alert")
+
+
+class OTPCode(Base):
+    """
+    Verification OTP codes for Two-Factor Authentication and Password Reset.
+    """
+    __tablename__ = "otp_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(100), nullable=False, index=True)
+    code = Column(String(6), nullable=False)
+    purpose = Column(
+        Enum("login", "reset_password", name="otp_purpose_enum"),
+        nullable=False
+    )
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False, server_default=text("0"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
