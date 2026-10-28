@@ -469,6 +469,32 @@ class ApiService {
     }
   }
 
+  /// Fetches the latest resolved diagnostic detection result for a cow
+  Future<DetectionResult> getLatestResult(dynamic cowId) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await _client.get(
+        Uri.parse(ApiConstants.latestResultEndpoint(cowId)),
+        headers: headers,
+      );
+
+      final data = _parseResponseBody(response);
+      if (response.statusCode == 200) {
+        return DetectionResult.fromJson(data);
+      } else if (response.statusCode == 202) {
+        throw const ApiException('Sensor telemetry still pending from IoT module.');
+      } else {
+        final message = data['detail'] ?? data['message'] ?? 'Failed to load test result.';
+        throw ApiException(message.toString());
+      }
+    } on SocketException {
+      throw const ApiException('Cannot reach server. Please check your network connection.');
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Error fetching latest result: ${e.toString()}');
+    }
+  }
+
   /// Polls the latest diagnostic test result (returns 202 if pending, 200 if completed)
   Future<Map<String, dynamic>> pollLatestResult(String cowId) async {
     try {

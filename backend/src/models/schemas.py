@@ -86,6 +86,7 @@ class CowResponse(BaseModel):
     breed: str
     age: int
     health_status: str = "Pending"
+    last_tested: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -99,6 +100,7 @@ class HistoricalTestRecord(BaseModel):
     electrical_conductivity: float
     reading_time: datetime
     prediction: Optional[str] = None
+    diagnostic_status: Optional[str] = None
     detection_time: Optional[datetime] = None
 
     class Config:
@@ -111,6 +113,7 @@ class CowDetailResponse(BaseModel):
     breed: str
     age: int
     health_status: str
+    last_tested: Optional[datetime] = None
     history: List[HistoricalTestRecord]
 
     class Config:
@@ -126,6 +129,8 @@ class TestInitiationResponse(BaseModel):
     cow_id: int
     health_status: str
     timestamp: datetime
+    status: Optional[str] = "testing"
+    expires_at: Optional[datetime] = None
 
 
 class TestPollPendingResponse(BaseModel):
@@ -145,12 +150,25 @@ class LatestResultPayload(BaseModel):
     detection_time: datetime
 
 
-class TestPollCompletedResponse(BaseModel):
-    status: str = "Completed"
+class DetectionResultResponse(BaseModel):
+    result_id: int
+    reading_id: int
     cow_id: int
     cow_tag: str
+    temperature: float
+    pH: float
+    electrical_conductivity: float
+    diagnostic_status: str
+    prediction: str
     health_status: str
-    result: LatestResultPayload
+    reading_time: datetime
+    detection_time: datetime
+    status: str = "Completed"
+    result: Optional[LatestResultPayload] = None
+
+
+# Alias for backward compatibility
+TestPollCompletedResponse = DetectionResultResponse
 
 
 # =============================================================================
@@ -158,7 +176,7 @@ class TestPollCompletedResponse(BaseModel):
 # =============================================================================
 
 class IoTSensorReadingRequest(BaseModel):
-    cow_id: int = Field(..., gt=0, description="Target cow ID undergoing test")
+    cow_id: Optional[int] = None
     temperature: float = Field(..., ge=0.0, le=45.0, description="Milk temperature in Celsius")
     pH: float = Field(..., ge=4.0, le=10.0, description="Milk pH value")
     electrical_conductivity: float = Field(..., ge=1.0, le=15.0, description="Conductivity in mS/cm")
@@ -170,6 +188,11 @@ class IoTProcessingResponse(BaseModel):
     result_id: int
     prediction: str
     cow_health_status: str
+
+
+class IoTIgnoredResponse(BaseModel):
+    status: str = "ignored"
+    message: str = "No active test session"
 
 
 # =============================================================================

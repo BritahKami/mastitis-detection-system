@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from zoneinfo import ZoneInfo
+
+EAT_TZ = ZoneInfo("Africa/Nairobi")
 
 class ActiveTestSessionManager:
     """
@@ -11,14 +14,16 @@ class ActiveTestSessionManager:
 
     def start_session(self, cow_id: int, cow_tag: str) -> Dict[str, Any]:
         """Locks incoming ESP32 readings to the specified cow for 3 minutes."""
-        now = datetime.now()
+        now = datetime.now(EAT_TZ)
         expires_at = now + timedelta(minutes=self.timeout_minutes)
         
         self._active_session = {
             "cow_id": cow_id,
             "cow_tag": cow_tag,
             "started_at": now,
-            "expires_at": expires_at
+            "expires_at": expires_at,
+            "latest_reading": None,
+            "latest_result": None
         }
         return self._active_session
 
@@ -27,14 +32,30 @@ class ActiveTestSessionManager:
         if self._active_session is None:
             return None
 
-        if datetime.now() > self._active_session["expires_at"]:
+        if datetime.now(EAT_TZ) > self._active_session["expires_at"]:
             self._active_session = None  # Lock expired
             return None
 
         return self._active_session["cow_id"]
 
+    def get_active_session(self) -> Optional[Dict[str, Any]]:
+        """Returns active session dictionary if lock exists and has not expired."""
+        if self._active_session is None:
+            return None
+
+        if datetime.now(EAT_TZ) > self._active_session["expires_at"]:
+            self._active_session = None
+            return None
+
+        return self._active_session
+
+    def update_latest_reading(self, reading_data: Dict[str, Any]) -> None:
+        """Keeps or updates the latest reading data during the session window."""
+        if self._active_session is not None:
+            self._active_session["latest_reading"] = reading_data
+
     def clear_session(self) -> None:
-        """Clears lock after reading is successfully processed."""
+        """Clears session lock."""
         self._active_session = None
 
 # Global singleton

@@ -2,7 +2,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import HTTPException, status
-from src.models.db_models import Farmer, Cow
+from src.models.db_models import Farmer, Cow, SensorReading
 from src.models.schemas import (
     CowRegisterRequest,
     CowResponse,
@@ -46,6 +46,7 @@ class CowController:
     ) -> List[CowResponse]:
         """
         Retrieves all cows owned by the authenticated farmer, ordered newest first.
+        Synchronizes dynamic health_status and last_tested timestamps.
         """
         cows = (
             db.query(Cow)
@@ -53,7 +54,20 @@ class CowController:
             .order_by(Cow.cow_id.desc())
             .all()
         )
-        return [CowResponse.model_validate(c) for c in cows]
+        results = []
+        for c in cows:
+            resp = CowResponse.model_validate(c)
+            if resp.last_tested is None:
+                latest_reading = (
+                    db.query(SensorReading.reading_time)
+                    .filter(SensorReading.cow_id == c.cow_id)
+                    .order_by(SensorReading.reading_time.desc())
+                    .first()
+                )
+                if latest_reading:
+                    resp.last_tested = latest_reading[0]
+            results.append(resp)
+        return results
 
     @staticmethod
     def get_cow_profile(
@@ -63,7 +77,8 @@ class CowController:
     ) -> CowDetailResponse:
         """
         Fetches the complete cow profile and utilizes a SQL JOIN between
-        Sensor_Reading and Detection_Result to return an array of historical test records.
+        Sensor_Reading and Detection_Result to return an array of all historical test records
+        without query limit or slicing truncation, ordered newest to oldest.
         """
         # 1. Enforce farmer ownership
         cow = (
@@ -91,13 +106,14 @@ class CowController:
             FROM Sensor_Reading sr
             LEFT JOIN Detection_Result dr ON sr.reading_id = dr.reading_id
             WHERE sr.cow_id = :cow_id
-            ORDER BY sr.reading_time DESC
+            ORDER BY sr.reading_time DESC, sr.reading_id DESC
         """)
 
         rows = db.execute(history_query, {"cow_id": cow_id}).mappings().all()
 
         history_records: List[HistoricalTestRecord] = []
         for row in rows:
+            pred = row["prediction"]
             history_records.append(
                 HistoricalTestRecord(
                     reading_id=row["reading_id"],
@@ -106,10 +122,15 @@ class CowController:
                     pH=float(row["pH"]),
                     electrical_conductivity=float(row["electrical_conductivity"]),
                     reading_time=row["reading_time"],
-                    prediction=row["prediction"],
+                    prediction=pred,
+                    diagnostic_status=pred,
                     detection_time=row["detection_time"]
                 )
             )
+
+        last_tested_val = cow.last_tested
+        if last_tested_val is None and history_records:
+            last_tested_val = history_records[0].reading_time
 
         return CowDetailResponse(
             cow_id=cow.cow_id,
@@ -117,5 +138,6 @@ class CowController:
             breed=cow.breed,
             age=cow.age,
             health_status=cow.health_status,
+            last_tested=last_tested_val,
             history=history_records
         )

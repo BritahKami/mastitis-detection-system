@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Union
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -8,15 +9,18 @@ from src.models.db_models import Farmer, Cow
 from src.models.schemas import (
     TestInitiationResponse,
     TestPollPendingResponse,
-    TestPollCompletedResponse,
+    DetectionResultResponse,
     LatestResultPayload
 )
+from src.services.session_service import session_manager
+
+EAT_TZ = ZoneInfo("Africa/Nairobi")
 
 
 class TestController:
     """
     Controller managing the asynchronous diagnostic testing lifecycle:
-    - Step 1: Mobile App triggers test initiation -> transitions Cow to 'Pending'
+    - Step 1: Mobile App triggers test initiation -> transitions Cow to 'Pending' & locks session
     - Step 2 & 6: Mobile App short polls -> returns 202 Accepted while Pending, 200 OK once resolved
     """
 
@@ -28,7 +32,7 @@ class TestController:
     ) -> TestInitiationResponse:
         """
         Step 1: Mobile application initiates a diagnostic test for a specific cow.
-        The backend transitions the cow's health_status to 'Pending' in the database.
+        Transitions the cow's health_status to 'Pending' and sets the 3-minute IoT session lock.
         """
         cow = (
             db.query(Cow)
@@ -46,12 +50,20 @@ class TestController:
         db.commit()
         db.refresh(cow)
 
-        now = datetime.now(timezone.utc)
+        # Start 3-minute session lock for ESP32 telemetry ingestion
+        session_data = session_manager.start_session(
+            cow_id=cow.cow_id,
+            cow_tag=cow.cow_tag
+        )
+
+        now = datetime.now(EAT_TZ)
         return TestInitiationResponse(
-            message="Diagnostic test initiated. Awaiting IoT sensor telemetry.",
+            message=f"Active test session initialized for {cow.cow_tag}. Awaiting IoT sensor telemetry.",
             cow_id=cow.cow_id,
             health_status="Pending",
-            timestamp=now
+            timestamp=now,
+            status="testing",
+            expires_at=session_data["expires_at"]
         )
 
     @staticmethod
@@ -59,7 +71,7 @@ class TestController:
         cow_id: int,
         current_farmer: Farmer,
         db: Session
-    ) -> Union[JSONResponse, TestPollCompletedResponse]:
+    ) -> Union[JSONResponse, DetectionResultResponse]:
         """
         Step 2 & Step 6: Mobile App polls every 2 seconds.
         - While cow.health_status == 'Pending': returns HTTP 202 Accepted.
@@ -89,7 +101,7 @@ class TestController:
                 content=pending_payload.model_dump()
             )
 
-        # Step 6: Processed -> Fetch latest Detection_Result joined with Sensor_Reading
+        # Step 6: Processed -> Fetch latest Detection_Result joined with Sensor_Reading and Cow
         query = text("""
             SELECT 
                 dr.result_id,
@@ -107,7 +119,7 @@ class TestController:
             JOIN Sensor_Reading sr ON dr.reading_id = sr.reading_id
             JOIN Cow c ON dr.cow_id = c.cow_id
             WHERE dr.cow_id = :cow_id
-            ORDER BY dr.detection_time DESC
+            ORDER BY dr.result_id DESC, dr.detection_time DESC
             LIMIT 1
         """)
 
@@ -119,19 +131,34 @@ class TestController:
                 detail=f"No diagnostic test results recorded for Cow {cow.cow_tag}."
             )
 
-        return TestPollCompletedResponse(
+        temp_val = float(latest_record["temperature"])
+        ph_val = float(latest_record["pH"])
+        cond_val = float(latest_record["electrical_conductivity"])
+        pred_val = str(latest_record["prediction"])
+        health_val = str(latest_record["health_status"])
+
+        return DetectionResultResponse(
             status="Completed",
             cow_id=cow.cow_id,
             cow_tag=latest_record["cow_tag"],
-            health_status=latest_record["health_status"],
+            health_status=health_val,
+            diagnostic_status=pred_val,
+            prediction=pred_val,
+            temperature=temp_val,
+            pH=ph_val,
+            electrical_conductivity=cond_val,
+            reading_id=latest_record["reading_id"],
+            result_id=latest_record["result_id"],
+            reading_time=latest_record["reading_time"],
+            detection_time=latest_record["detection_time"],
             result=LatestResultPayload(
                 result_id=latest_record["result_id"],
                 reading_id=latest_record["reading_id"],
-                temperature=float(latest_record["temperature"]),
-                pH=float(latest_record["pH"]),
-                electrical_conductivity=float(latest_record["electrical_conductivity"]),
+                temperature=temp_val,
+                pH=ph_val,
+                electrical_conductivity=cond_val,
                 reading_time=latest_record["reading_time"],
-                prediction=latest_record["prediction"],
+                prediction=pred_val,
                 detection_time=latest_record["detection_time"]
             )
         )

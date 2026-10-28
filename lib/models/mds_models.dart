@@ -8,30 +8,89 @@ enum StatusType {
 }
 
 class TestHistoryRecord {
+  final int? resultId;
+  final int? readingId;
   final String date;
+  final String formattedTime;
   final bool mastitisPresent;
+  final double temperature;
+  final double pH;
+  final double electricalConductivity;
+  final String diagnosticOutcome;
 
   const TestHistoryRecord({
+    this.resultId,
+    this.readingId,
     required this.date,
+    this.formattedTime = '',
     required this.mastitisPresent,
+    this.temperature = 0.0,
+    this.pH = 0.0,
+    this.electricalConductivity = 0.0,
+    this.diagnosticOutcome = '',
   });
 
   String get label => mastitisPresent ? 'Mastitis present' : 'Mastitis absent';
 
   factory TestHistoryRecord.fromJson(Map<String, dynamic> json) {
+    String rawTime = json['reading_time']?.toString() ??
+        json['detection_time']?.toString() ??
+        json['timestamp']?.toString() ??
+        json['date']?.toString() ??
+        '';
+
     String dateStr = '';
-    if (json['reading_time'] != null) {
-      dateStr = json['reading_time'].toString().split('T').first;
-    } else if (json['date'] != null) {
-      dateStr = json['date'].toString();
+    String timeStr = '';
+    if (rawTime.isNotEmpty) {
+      final parsed = DateTime.tryParse(rawTime);
+      if (parsed != null) {
+        final local = parsed.toLocal();
+        final year = local.year.toString().padLeft(4, '0');
+        final month = local.month.toString().padLeft(2, '0');
+        final day = local.day.toString().padLeft(2, '0');
+        final hour = local.hour.toString().padLeft(2, '0');
+        final minute = local.minute.toString().padLeft(2, '0');
+        dateStr = '$year-$month-$day';
+        timeStr = '$hour:$minute';
+      } else {
+        dateStr = rawTime.split('T').first;
+      }
     }
-    final pred = json['prediction']?.toString().toLowerCase();
-    final bool isPresent =
-        json['mastitisPresent'] == true || pred == 'mastitis present';
+
+    final rawPred = json['prediction']?.toString() ??
+        json['diagnostic_status']?.toString() ??
+        json['diagnosticOutcome']?.toString() ??
+        '';
+    final predLower = rawPred.toLowerCase();
+    final bool isPresent = json['mastitisPresent'] == true ||
+        predLower.contains('present') ||
+        predLower == 'at risk';
+
+    final num? tempNum = json['temperature'] as num?;
+    final num? phNum = (json['pH'] ?? json['ph']) as num?;
+    final num? condNum = (json['electrical_conductivity'] ??
+        json['electricalConductivity'] ??
+        json['conductivity']) as num?;
+
+    final resId = json['result_id'] is int
+        ? json['result_id'] as int
+        : int.tryParse(json['result_id']?.toString() ?? json['resultId']?.toString() ?? '');
+    final readId = json['reading_id'] is int
+        ? json['reading_id'] as int
+        : int.tryParse(json['reading_id']?.toString() ?? json['readingId']?.toString() ?? '');
 
     return TestHistoryRecord(
+      resultId: resId,
+      readingId: readId,
       date: dateStr,
+      formattedTime: timeStr,
       mastitisPresent: isPresent,
+      temperature: tempNum?.toDouble() ?? 0.0,
+      pH: phNum?.toDouble() ?? 0.0,
+      electricalConductivity: condNum?.toDouble() ?? 0.0,
+      diagnosticOutcome: rawPred.isNotEmpty
+          ? rawPred
+          : (isPresent ? 'Mastitis Present' : 'Mastitis Absent'),
     );
   }
 }
@@ -59,19 +118,6 @@ class Cow {
   String get rawTagId =>
       tagNumber.startsWith('Tag ') ? tagNumber.substring(4).trim() : tagNumber;
 
-  // factory Cow.fromJson(Map<String, dynamic> json) {
-  //   StatusType parseStatus(String? status) {
-  //     switch (status?.toLowerCase()) {
-  //       case 'at risk':
-  //       case 'atrisk':
-  //         return StatusType.atRisk;
-  //       case 'pending':
-  //         return StatusType.pending;
-  //       case 'healthy':
-  //       default:
-  //         return StatusType.healthy;
-  //     }
-  //   }
   factory Cow.fromJson(Map<String, dynamic> json) {
     StatusType parseStatus(String? status) {
       switch (status?.toLowerCase().trim()) {
@@ -103,6 +149,27 @@ class Cow {
         source['cow_tag'] ?? source['tag_number'] ?? source['tagNumber'] ?? '';
     final idVal = source['cow_id']?.toString() ?? source['id']?.toString() ?? '';
 
+    // Parse last_tested timestamp and convert to local device time
+    String lastTestedStr = 'Not tested';
+    final rawLastTested = source['last_tested'] ??
+        source['lastTested'] ??
+        (historyList.isNotEmpty ? '${historyList.first.date} ${historyList.first.formattedTime}'.trim() : null);
+
+    if (rawLastTested != null && rawLastTested.toString().isNotEmpty && rawLastTested.toString() != 'Not tested') {
+      final parsed = DateTime.tryParse(rawLastTested.toString());
+      if (parsed != null) {
+        final local = parsed.toLocal();
+        final year = local.year.toString().padLeft(4, '0');
+        final month = local.month.toString().padLeft(2, '0');
+        final day = local.day.toString().padLeft(2, '0');
+        final hour = local.hour.toString().padLeft(2, '0');
+        final minute = local.minute.toString().padLeft(2, '0');
+        lastTestedStr = '$year-$month-$day $hour:$minute';
+      } else {
+        lastTestedStr = rawLastTested.toString();
+      }
+    }
+
     return Cow(
       id: idVal,
       tagNumber: rawTag.toString(),
@@ -112,8 +179,7 @@ class Cow {
           : (int.tryParse(source['age']?.toString() ?? '') ?? 0),
       status: parseStatus(
           source['health_status']?.toString() ?? source['status']?.toString()),
-      lastTested: source['lastTested']?.toString() ??
-          (historyList.isNotEmpty ? historyList.first.date : 'Not tested'),
+      lastTested: lastTestedStr,
       history: historyList,
     );
   }
@@ -159,35 +225,65 @@ class DetectionResult {
   });
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
-    final String prediction =
-        json['prediction']?.toString() ?? json['diagnosis']?.toString() ?? 'Mastitis Absent';
+    // Unpack nested 'result' dictionary if present (from backend DetectionResultResponse)
+    final Map<String, dynamic> source =
+        json['result'] is Map<String, dynamic> ? json['result'] as Map<String, dynamic> : json;
+
+    final String prediction = source['prediction']?.toString() ??
+        json['prediction']?.toString() ??
+        source['diagnostic_status']?.toString() ??
+        json['diagnostic_status']?.toString() ??
+        source['diagnosis']?.toString() ??
+        json['diagnosis']?.toString() ??
+        'Mastitis Absent';
+
+    final String healthStatus = json['health_status']?.toString() ??
+        source['health_status']?.toString() ??
+        json['diagnostic_status']?.toString() ??
+        '';
 
     final bool isMastitisPresent = prediction.toLowerCase().contains('present') ||
-        json['health_status']?.toString().toLowerCase() == 'at risk';
+        healthStatus.toLowerCase() == 'at risk';
 
-    final double temp = (json['temperature'] as num? ?? 38.5).toDouble();
-    final double phVal = (json['pH'] as num? ?? json['ph'] as num? ?? 6.65).toDouble();
-    final double condVal =
-        (json['electrical_conductivity'] as num? ?? json['conductivity'] as num? ?? 4.80).toDouble();
+    final num? rawTemp = source['temperature'] as num? ?? json['temperature'] as num?;
+    final num? rawPh = source['pH'] as num? ??
+        source['ph'] as num? ??
+        json['pH'] as num? ??
+        json['ph'] as num?;
+    final num? rawCond = source['electrical_conductivity'] as num? ??
+        source['conductivity'] as num? ??
+        json['electrical_conductivity'] as num? ??
+        json['conductivity'] as num?;
 
-    String rawTime =
-        json['detection_time']?.toString() ?? json['reading_time']?.toString() ?? json['timestamp']?.toString() ?? '';
+    final double temp = (rawTemp ?? 38.5).toDouble();
+    final double phVal = (rawPh ?? 6.65).toDouble();
+    final double condVal = (rawCond ?? 4.80).toDouble();
+
+    String rawTime = source['detection_time']?.toString() ??
+        source['reading_time']?.toString() ??
+        json['detection_time']?.toString() ??
+        json['reading_time']?.toString() ??
+        json['timestamp']?.toString() ??
+        '';
     String formattedTime = rawTime;
 
     if (rawTime.isNotEmpty) {
       final parsed = DateTime.tryParse(rawTime);
       if (parsed != null) {
-        final year = parsed.year.toString().padLeft(4, '0');
-        final month = parsed.month.toString().padLeft(2, '0');
-        final day = parsed.day.toString().padLeft(2, '0');
-        final hour = parsed.hour.toString().padLeft(2, '0');
-        final minute = parsed.minute.toString().padLeft(2, '0');
+        final local = parsed.toLocal();
+        final year = local.year.toString().padLeft(4, '0');
+        final month = local.month.toString().padLeft(2, '0');
+        final day = local.day.toString().padLeft(2, '0');
+        final hour = local.hour.toString().padLeft(2, '0');
+        final minute = local.minute.toString().padLeft(2, '0');
         formattedTime = '$year-$month-$day $hour:$minute';
       }
     }
 
     final String tag = json['cow_tag']?.toString() ??
+        source['cow_tag']?.toString() ??
         json['tag_number']?.toString() ??
+        source['tag_number']?.toString() ??
         json['tagNumber']?.toString() ??
         '';
 

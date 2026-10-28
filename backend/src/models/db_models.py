@@ -48,6 +48,7 @@ class Cow(Base):
         default="Pending",
         server_default=text("'Pending'")
     )
+    last_tested = Column(DateTime, nullable=True)
 
     # Relationships
     farmer = relationship("Farmer", back_populates="cows")

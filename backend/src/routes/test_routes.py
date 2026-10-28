@@ -6,7 +6,7 @@ from src.models.db_models import Farmer
 from src.models.schemas import (
     TestInitiationResponse,
     TestPollPendingResponse,
-    TestPollCompletedResponse
+    DetectionResultResponse
 )
 from src.controllers.test_controller import TestController
 
@@ -34,14 +34,14 @@ def initiate_test(
 
 @router.get(
     "/{cow_id}/latest-result",
-    response_model=TestPollCompletedResponse,
+    response_model=DetectionResultResponse,
     responses={
         202: {
             "model": TestPollPendingResponse,
             "description": "Hardware telemetry still pending from IoT ESP32 module."
         },
         200: {
-            "model": TestPollCompletedResponse,
+            "model": DetectionResultResponse,
             "description": "Inference complete. Combined sensor readings and prediction returned."
         }
     },

@@ -7,10 +7,11 @@ from src.models.db_models import Farmer
 from src.models.schemas import (
     CowRegisterRequest,
     CowResponse,
-    CowDetailResponse
+    CowDetailResponse,
+    TestInitiationResponse
 )
 from src.controllers.cow_controller import CowController
-from src.services.session_service import session_manager
+from src.controllers.test_controller import TestController
 
 router = APIRouter(prefix="/cows", tags=["Cow Management"])
 
@@ -69,6 +70,7 @@ def get_cow(
 
 @router.post(
     "/{cow_id}/initiate-test",
+    response_model=TestInitiationResponse,
     status_code=status.HTTP_200_OK,
     summary="Start an active 3-minute diagnostic test session for a cow"
 )
@@ -78,26 +80,8 @@ def start_cow_test(
     db: Session = Depends(get_db)
 ):
     """
-    Locks incoming ESP32 sensor telemetry to this specific cow_id for 3 minutes.
-    Called when the farmer taps 'Select cow to test' in the mobile app.
+    Step 1 of Asynchronous Testing Workflow:
+    Locks incoming ESP32 sensor telemetry to this specific cow_id for 3 minutes
+    and transitions cow health_status to 'Pending'.
     """
-    # 1. Verify the cow exists and belongs to the logged-in farmer
-    cow = CowController.get_cow_profile(cow_id, current_farmer, db)
-    if not cow:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cow with ID {cow_id} not found"
-        )
-
-    # 2. Lock session for 3 minutes using the database column cow_tag
-    session_data = session_manager.start_session(
-        cow_id=cow_id,
-        cow_tag=cow.cow_tag
-    )
-
-    return {
-        "status": "testing",
-        "message": f"Active test session initialized for {cow.cow_tag}",
-        "cow_id": cow_id,
-        "expires_at": session_data["expires_at"].isoformat()
-    }
+    return TestController.initiate_test(cow_id, current_farmer, db)

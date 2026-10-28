@@ -28,10 +28,12 @@ CREATE TABLE IF NOT EXISTS Cow (
     breed VARCHAR(50) NOT NULL,
     age INT NOT NULL,
     health_status ENUM('Healthy', 'At Risk', 'Pending') NOT NULL DEFAULT 'Pending',
+    last_tested DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmer_id) REFERENCES Farmer(farmer_id) ON DELETE CASCADE,
     INDEX idx_cow_farmer (farmer_id),
-    INDEX idx_cow_status (health_status)
+    INDEX idx_cow_status (health_status),
+    INDEX idx_cow_last_tested (last_tested)
 ) ENGINE=InnoDB;
 
 -- 3. Sensor_Reading Table
