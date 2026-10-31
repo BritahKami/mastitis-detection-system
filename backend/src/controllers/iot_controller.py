@@ -81,9 +81,9 @@ class IoTController:
             cow.last_tested = eat_now
 
             # 6. Generate Alert if Mastitis is detected
-            if prediction_label == "Mastitis Present":
+            if prediction_label == "Mastitis Present" or new_health_status == "At Risk":
                 alert_message = (
-                    f"Urgent: Mastitis detected for Cow {cow.cow_tag}. "
+                    f"{cow.cow_tag}: Mastitis Present - "
                     f"Temp: {payload.temperature:.1f}°C, pH: {payload.pH:.2f}, "
                     f"Cond: {payload.electrical_conductivity:.2f} mS/cm."
                 )

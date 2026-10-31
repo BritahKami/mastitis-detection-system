@@ -60,7 +60,13 @@ class DataRowItem extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                badgeWidget,
+                SizedBox(
+                  width: 80.0,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: badgeWidget,
+                  ),
+                ),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -83,25 +89,46 @@ class DataRowItem extends StatelessWidget {
                 ),
               ],
             )
-          // Standard cattle list layout: Leading text on left, badge + trailing date on right
+          // Standard cattle list layout: Left column (Tag), Center fixed column (Badge), Right column (Timestamp/Status)
           : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  leadingText,
-                  style: AppTypography.listRowTitle,
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    badgeWidget,
-                    const SizedBox(width: 12.0),
-                    Text(
-                      trailingText,
-                      style: AppTypography.bodyRegular,
+                // 1. Cow Tag Number (Left Column pinned to far left)
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      leadingText,
+                      style: AppTypography.listRowTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
+                  ),
+                ),
+                // 2. Health Status Badge (Dedicated, fixed-width container with centered alignment)
+                SizedBox(
+                  width: 90.0,
+                  child: Center(
+                    child: badgeWidget,
+                  ),
+                ),
+                // 3. Test Timestamp / Status Text (Dedicated right-aligned container pinned flush to trailing margin)
+                Expanded(
+                  flex: 4,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      trailingText,
+                      textAlign: TextAlign.right,
+                      style: AppTypography.bodyRegular.copyWith(
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ],
             ),

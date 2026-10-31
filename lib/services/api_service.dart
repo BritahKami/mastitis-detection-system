@@ -534,7 +534,8 @@ class ApiService {
         final dynamic decoded = jsonDecode(response.body);
         if (decoded is List) {
           return decoded
-              .map((item) => AlertNotification.fromJson(item as Map<String, dynamic>))
+              .whereType<Map<String, dynamic>>()
+              .map((item) => AlertNotification.fromJson(item))
               .toList();
         }
         return [];

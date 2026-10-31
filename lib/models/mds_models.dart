@@ -324,28 +324,74 @@ class DetectionResult {
 }
 
 class AlertNotification {
+  final int alertId;
+  final int resultId;
+  final int farmerId;
+  final String message;
+  final String status;
+  final String sendTime;
   final String id;
   final String tagNumber;
   final String timestamp;
   final bool isUnread;
 
   const AlertNotification({
+    this.alertId = 0,
+    this.resultId = 0,
+    this.farmerId = 0,
+    this.message = '',
+    this.status = 'Unread',
+    this.sendTime = '',
     required this.id,
     required this.tagNumber,
     required this.timestamp,
     required this.isUnread,
   });
 
+  /// Helper property to extract and return the cow tag from the message string.
+  /// Handles prefixes like "COW-009: Mastitis Present" or embedded patterns like "Cow COW-009".
+  String get cowTag {
+    if (tagNumber.isNotEmpty && tagNumber != 'Unknown Cow') {
+      return tagNumber;
+    }
+    if (message.isNotEmpty) {
+      if (message.contains(':')) {
+        final prefix = message.split(':').first.trim();
+        if (prefix.isNotEmpty && !prefix.toLowerCase().contains('urgent') && !prefix.toLowerCase().contains('alert')) {
+          return prefix;
+        }
+      }
+      final regex = RegExp(r'\b(COW[-\s]?\d+|Tag[-\s]?\d+)\b', caseSensitive: false);
+      final match = regex.firstMatch(message);
+      if (match != null) {
+        return match.group(1)!;
+      }
+    }
+    return tagNumber.isNotEmpty ? tagNumber : 'Cow Alert';
+  }
+
   StatusType get badgeState => isUnread ? StatusType.atRisk : StatusType.healthy;
   String get badgeLabel => isUnread ? 'Unread' : 'Read';
 
   AlertNotification copyWith({
+    int? alertId,
+    int? resultId,
+    int? farmerId,
+    String? message,
+    String? status,
+    String? sendTime,
     String? id,
     String? tagNumber,
     String? timestamp,
     bool? isUnread,
   }) {
     return AlertNotification(
+      alertId: alertId ?? this.alertId,
+      resultId: resultId ?? this.resultId,
+      farmerId: farmerId ?? this.farmerId,
+      message: message ?? this.message,
+      status: status ?? (isUnread != null ? (isUnread ? 'Unread' : 'Read') : this.status),
+      sendTime: sendTime ?? this.sendTime,
       id: id ?? this.id,
       tagNumber: tagNumber ?? this.tagNumber,
       timestamp: timestamp ?? this.timestamp,
@@ -354,30 +400,64 @@ class AlertNotification {
   }
 
   factory AlertNotification.fromJson(Map<String, dynamic> json) {
-    final statusStr = json['status']?.toString().toLowerCase();
-    final isUnread = statusStr == 'unread' || json['isUnread'] == true;
-    final tag = json['cow_tag'] ?? json['tagNumber'] ?? 'Unknown Cow';
-    final rawTime = json['send_time'] ?? json['timestamp'] ?? '';
+    final int aId = json['alert_id'] is int
+        ? json['alert_id'] as int
+        : (int.tryParse(json['alert_id']?.toString() ?? json['id']?.toString() ?? '') ?? 0);
+    final int rId = json['result_id'] is int
+        ? json['result_id'] as int
+        : (int.tryParse(json['result_id']?.toString() ?? '') ?? 0);
+    final int fId = json['farmer_id'] is int
+        ? json['farmer_id'] as int
+        : (int.tryParse(json['farmer_id']?.toString() ?? '') ?? 0);
+    final String msg = json['message']?.toString() ?? '';
+    final String statusStr = json['status']?.toString() ?? (json['isUnread'] == false ? 'Read' : 'Unread');
+    final bool isUnread = statusStr.toLowerCase() == 'unread' || json['isUnread'] == true;
+    final String rawTime = json['send_time']?.toString() ?? json['timestamp']?.toString() ?? '';
 
-    String formattedTimestamp = rawTime.toString();
-    final parsed = DateTime.tryParse(formattedTimestamp);
+    // Extract cow tag from direct field or message
+    String extractedTag = json['cow_tag']?.toString() ?? json['tagNumber']?.toString() ?? '';
+    if (extractedTag.isEmpty && msg.isNotEmpty) {
+      if (msg.contains(':')) {
+        final prefix = msg.split(':').first.trim();
+        if (prefix.isNotEmpty && !prefix.toLowerCase().contains('urgent') && !prefix.toLowerCase().contains('alert')) {
+          extractedTag = prefix;
+        }
+      }
+      if (extractedTag.isEmpty) {
+        final match = RegExp(r'\b(COW[-\s]?\d+|Tag[-\s]?\d+)\b', caseSensitive: false).firstMatch(msg);
+        if (match != null) {
+          extractedTag = match.group(1)!;
+        }
+      }
+    }
+    if (extractedTag.isEmpty) {
+      extractedTag = 'Unknown Cow';
+    }
+
+    String formattedTimestamp = rawTime;
+    final parsed = DateTime.tryParse(rawTime);
     if (parsed != null) {
-      final year = parsed.year.toString().padLeft(4, '0');
-      final month = parsed.month.toString().padLeft(2, '0');
-      final day = parsed.day.toString().padLeft(2, '0');
-      final hour = parsed.hour.toString().padLeft(2, '0');
-      final minute = parsed.minute.toString().padLeft(2, '0');
+      final local = parsed.toLocal();
+      final year = local.year.toString().padLeft(4, '0');
+      final month = local.month.toString().padLeft(2, '0');
+      final day = local.day.toString().padLeft(2, '0');
+      final hour = local.hour.toString().padLeft(2, '0');
+      final minute = local.minute.toString().padLeft(2, '0');
       formattedTimestamp = '$year-$month-$day $hour:$minute';
     } else if (formattedTimestamp.length >= 16 &&
-        RegExp(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}')
-            .hasMatch(formattedTimestamp)) {
-      formattedTimestamp =
-          formattedTimestamp.substring(0, 16).replaceFirst('T', ' ');
+        RegExp(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}').hasMatch(formattedTimestamp)) {
+      formattedTimestamp = formattedTimestamp.substring(0, 16).replaceFirst('T', ' ');
     }
 
     return AlertNotification(
-      id: json['alert_id']?.toString() ?? json['id']?.toString() ?? '',
-      tagNumber: tag.toString(),
+      alertId: aId,
+      resultId: rId,
+      farmerId: fId,
+      message: msg,
+      status: statusStr,
+      sendTime: rawTime,
+      id: aId > 0 ? aId.toString() : (json['id']?.toString() ?? ''),
+      tagNumber: extractedTag,
       timestamp: formattedTimestamp,
       isUnread: isUnread,
     );

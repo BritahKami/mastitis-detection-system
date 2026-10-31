@@ -25,15 +25,16 @@ class AlertController:
             SELECT 
                 a.alert_id,
                 a.result_id,
+                a.farmer_id,
                 c.cow_tag,
                 a.message,
                 a.status,
                 a.send_time
             FROM Alert a
-            JOIN Detection_Result dr ON a.result_id = dr.result_id
-            JOIN Cow c ON dr.cow_id = c.cow_id
+            LEFT JOIN Detection_Result dr ON a.result_id = dr.result_id
+            LEFT JOIN Cow c ON dr.cow_id = c.cow_id
             WHERE a.farmer_id = :farmer_id
-            ORDER BY a.send_time DESC
+            ORDER BY a.send_time DESC, a.alert_id DESC
         """)
 
         rows = db.execute(query, {"farmer_id": current_farmer.farmer_id}).mappings().all()
@@ -42,6 +43,7 @@ class AlertController:
             AlertResponse(
                 alert_id=row["alert_id"],
                 result_id=row["result_id"],
+                farmer_id=row["farmer_id"],
                 cow_tag=row["cow_tag"],
                 message=row["message"],
                 status=row["status"],

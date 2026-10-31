@@ -18,12 +18,14 @@ class AlertsScreen extends StatefulWidget {
   final List<AlertNotification>? initialAlerts;
   final ValueChanged<int>? onTabSelected;
   final bool showBottomNav;
+  final bool isActive;
 
   const AlertsScreen({
     super.key,
     this.initialAlerts,
     this.onTabSelected,
     this.showBottomNav = true,
+    this.isActive = true,
   });
 
   @override
@@ -44,6 +46,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
     } else {
       _alerts = [];
       _isLoading = true;
+      _fetchAlerts();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AlertsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Trigger async fetch whenever user switches to the Alerts tab
+    if (widget.isActive && !oldWidget.isActive) {
       _fetchAlerts();
     }
   }
@@ -293,7 +304,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                                             itemBuilder: (context, index) {
                                               final alert = _alerts[index];
                                               return DataRowItem(
-                                                leadingText: alert.tagNumber,
+                                                leadingText: alert.cowTag,
                                                 badgeState: alert.badgeState,
                                                 badgeLabel: alert.badgeLabel,
                                                 badgeLeading: true,

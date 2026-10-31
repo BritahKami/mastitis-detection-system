@@ -202,6 +202,7 @@ class IoTIgnoredResponse(BaseModel):
 class AlertResponse(BaseModel):
     alert_id: int
     result_id: int
+    farmer_id: int
     cow_tag: Optional[str] = None
     message: str
     status: str

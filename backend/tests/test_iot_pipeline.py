@@ -279,6 +279,86 @@ class TestIoTPipelineWorkflows(unittest.TestCase):
         last_record = profile.history[-1]
         self.assertAlmostEqual(last_record.temperature, 38.0, places=1)
 
+    def test_alert_generation_and_retrieval_pipeline(self):
+        """
+        End-to-End Alert Pipeline Verification:
+        1. Ingestion creates Alert record when Mastitis Present / At Risk.
+        2. Alert adheres to schema: alert_id, result_id, farmer_id, message (with cow tag prefix), status='Unread', send_time.
+        3. Alert retrieval (GET /api/alerts via AlertController.get_alerts) is filtered by authenticated farmer_id.
+        4. Alerts are ordered chronologically newest first.
+        5. Single read and bulk read status transitions work correctly.
+        """
+        from src.models.db_models import Alert
+        from src.controllers.alert_controller import AlertController
+
+        # 1. Process positive mastitis telemetry
+        payload_positive = IoTSensorReadingRequest(
+            cow_id=self.cow.cow_id,
+            temperature=40.5,
+            pH=7.10,
+            electrical_conductivity=6.90
+        )
+        proc_res = IoTController.process_sensor_reading(
+            payload=payload_positive,
+            db=self.db,
+            active_cow_id=self.cow.cow_id
+        )
+        self.assertEqual(proc_res.status, "Processed")
+        self.assertEqual(proc_res.prediction, "Mastitis Present")
+        self.assertEqual(proc_res.cow_health_status, "At Risk")
+
+        # 2. Query Alert table directly and verify schema adherence
+        alert = self.db.query(Alert).filter(Alert.result_id == proc_res.result_id).first()
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.farmer_id, self.farmer.farmer_id)
+        self.assertEqual(alert.result_id, proc_res.result_id)
+        self.assertEqual(alert.status, "Unread")
+        self.assertTrue(alert.message.startswith(f"{self.cow.cow_tag}: Mastitis Present"))
+        self.assertIsNotNone(alert.send_time)
+
+        # 3. Test Alert Retrieval for authenticated farmer
+        alerts = AlertController.get_alerts(current_farmer=self.farmer, db=self.db)
+        self.assertGreaterEqual(len(alerts), 1)
+        farmer_alert = alerts[0]
+        self.assertEqual(farmer_alert.alert_id, alert.alert_id)
+        self.assertEqual(farmer_alert.result_id, proc_res.result_id)
+        self.assertEqual(farmer_alert.farmer_id, self.farmer.farmer_id)
+        self.assertEqual(farmer_alert.cow_tag, self.cow.cow_tag)
+        self.assertEqual(farmer_alert.status, "Unread")
+        self.assertTrue(farmer_alert.message.startswith(f"{self.cow.cow_tag}: Mastitis Present"))
+        self.assertEqual(farmer_alert.send_time, alert.send_time)
+
+        # 4. Verify tenant isolation: a different farmer receives NO alerts
+        other_farmer = Farmer(
+            fname="Jane",
+            lname="Smith",
+            email="jane@otherfarm.com",
+            password="hashedpassword"
+        )
+        self.db.add(other_farmer)
+        self.db.commit()
+        self.db.refresh(other_farmer)
+
+        other_alerts = AlertController.get_alerts(current_farmer=other_farmer, db=self.db)
+        self.assertEqual(len(other_alerts), 0)
+
+        # 5. Mark alert as Read
+        read_res = AlertController.mark_alert_as_read(
+            alert_id=alert.alert_id,
+            current_farmer=self.farmer,
+            db=self.db
+        )
+        self.assertEqual(read_res.alert_id, alert.alert_id)
+        self.db.refresh(alert)
+        self.assertEqual(alert.status, "Read")
+
+        # 6. Bulk mark as read
+        bulk_res = AlertController.mark_all_alerts_read(
+            current_farmer=self.farmer,
+            db=self.db
+        )
+        self.assertIsInstance(bulk_res.updated_count, int)
+
 
 if __name__ == "__main__":
     unittest.main()

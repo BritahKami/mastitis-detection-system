@@ -47,6 +47,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ),
           AlertsScreen(
             showBottomNav: false,
+            isActive: _currentIndex == 1,
             onTabSelected: _onTabSelected,
           ),
           ProfileScreen(
