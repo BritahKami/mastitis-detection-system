@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -865,6 +866,61 @@ Future<void> performLoginFlow(WidgetTester tester) async {
 
       // Returned to LoginScreen
       expect(find.text('Welcome back'), findsOneWidget);
+    });
+
+    testWidgets('Forgot password dialog genuinely disables cancel and submit buttons during submission', (tester) async {
+      final completer = Completer<http.Response>();
+      final controlledClient = MockClient((request) async {
+        if (request.url.path == '/api/auth/forgot-password') {
+          return completer.future;
+        }
+        return http.Response('{"detail": "Not found"}', 404);
+      });
+      ApiService().setClientForTesting(controlledClient);
+
+      await tester.pumpWidget(const MastitisDetectionApp());
+      await tester.pumpAndSettle();
+
+      // Open dialog
+      await tester.tap(find.text('Forgot password?'));
+      await tester.pumpAndSettle();
+
+      final dialogEmailField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextFormField),
+      );
+      await tester.enterText(dialogEmailField, 'farmer@dairyfarm.com');
+
+      // Before tapping: both buttons are enabled
+      final cancelButtonBefore = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'));
+      final sendCodeButtonBefore = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Send Code'));
+      expect(cancelButtonBefore.onPressed, isNotNull);
+      expect(sendCodeButtonBefore.onPressed, isNotNull);
+
+      // Tap Send Code and pump one frame to trigger the async action
+      await tester.tap(find.text('Send Code'));
+      await tester.pump();
+
+      // While request is in flight: both buttons are genuinely disabled
+      final cancelButtonDuring = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'));
+      final sendCodeButtonDuring = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Send Code'));
+      expect(cancelButtonDuring.onPressed, isNull);
+      expect(sendCodeButtonDuring.onPressed, isNull);
+
+      // Complete the network request and let UI settle
+      completer.complete(
+        http.Response(
+          jsonEncode({'message': 'A verification code has been sent to your email.'}),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Navigated to VerifyResetCodeScreen
+      expect(find.text('Verify Code'), findsNWidgets(2));
     });
   });
 

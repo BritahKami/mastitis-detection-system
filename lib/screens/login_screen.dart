@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/theme_constants.dart';
 import '../widgets/custom_primary_button.dart';
-import 'main_shell_screen.dart';
 import 'register_screen.dart';
 import 'login_verification_screen.dart';
 import 'verify_reset_code_screen.dart';
@@ -140,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.container),
@@ -197,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: isSubmittingDialog ? null : () => Navigator.of(ctx).pop(),
+              onPressed: isSubmittingDialog ? null : () => Navigator.of(dialogCtx).pop(),
               child: const Text(
                 'Cancel',
                 style: TextStyle(
@@ -214,8 +213,35 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (inputEmail.isEmpty) {
                         return;
                       }
-                      Navigator.of(ctx).pop();
-                      _sendForgotPassword(inputEmail);
+                      setDialogState(() {
+                        isSubmittingDialog = true;
+                      });
+                      try {
+                        await ApiService().forgotPassword(inputEmail);
+                        if (!dialogCtx.mounted) return;
+                        Navigator.of(dialogCtx).pop();
+                        if (!mounted) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: '/verify-reset-code'),
+                            builder: (context) => VerifyResetCodeScreen(email: inputEmail),
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceAll('ApiException: ', '')),
+                            backgroundColor: AppColors.badgeAtRiskText,
+                          ),
+                        );
+                      } finally {
+                        if (dialogCtx.mounted) {
+                          setDialogState(() {
+                            isSubmittingDialog = false;
+                          });
+                        }
+                      }
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryTheme,
