@@ -359,6 +359,117 @@ class TestIoTPipelineWorkflows(unittest.TestCase):
         )
         self.assertIsInstance(bulk_res.updated_count, int)
 
+    def test_five_reading_bounded_session_and_alert_deduplication(self):
+        """
+        Verify that:
+        1. When a test is initiated, the session accepts only the first 5 valid sensor readings.
+        2. Once the 5th reading is processed, session lock automatically closes.
+        3. Trailing readings (6th, 7th) are ignored with 200 OK {"status": "ignored", "message": "No active test session"}.
+        4. Exactly 5 readings and 5 detection results are stored in the database and returned in cow profile history.
+        5. Across all 5 positive (Mastitis Present) readings, exactly 1 unread alert is created (no duplicates).
+        6. GET /api/cows/{cow_id}/latest-result cleanly returns the 5th (latest) result before and after the session closes.
+        """
+        import json
+        from src.controllers.alert_controller import AlertController
+        from src.controllers.cow_controller import CowController
+        from src.models.db_models import Alert
+
+        # 1. Initiate test session for COW-008
+        init_res = TestController.initiate_test(
+            cow_id=self.cow.cow_id,
+            current_farmer=self.farmer,
+            db=self.db
+        )
+        self.assertEqual(init_res.health_status, "Pending")
+        self.assertEqual(session_manager.get_active_cow_id(), self.cow.cow_id)
+        self.assertEqual(session_manager.get_reading_count(), 0)
+
+        # 2. Ingest 5 positive (Mastitis Present) sensor readings from ESP32
+        # Values known to trigger Mastitis Present: Temp: 40.5, pH: 7.10, Cond: 6.90
+        processed_responses = []
+        for i in range(1, 6):
+            payload = IoTSensorReadingRequest(
+                temperature=40.0 + (i * 0.1),
+                pH=7.00 + (i * 0.02),
+                electrical_conductivity=6.80 + (i * 0.05)
+            )
+            res = ingest_sensor_reading(payload=payload, db=self.db)
+            self.assertEqual(res.status, "Processed")
+            self.assertEqual(res.prediction, "Mastitis Present")
+            processed_responses.append(res)
+            
+            # Check latest-result endpoint returns this latest reading
+            poll_res = TestController.poll_latest_result(
+                cow_id=self.cow.cow_id,
+                current_farmer=self.farmer,
+                db=self.db
+            )
+            self.assertIsInstance(poll_res, DetectionResultResponse)
+            self.assertEqual(poll_res.reading_id, res.reading_id)
+            self.assertEqual(poll_res.result_id, res.result_id)
+            self.assertEqual(poll_res.prediction, "Mastitis Present")
+
+        # 3. Verify session lock is now automatically CLOSED after the 5th reading
+        self.assertIsNone(session_manager.get_active_cow_id())
+        self.assertIsNone(session_manager.get_active_session())
+
+        # 4. Ingest 6th and 7th readings (trailing 5-second ESP32 packets)
+        for trailing_i in [6, 7]:
+            trailing_payload = IoTSensorReadingRequest(
+                temperature=40.8,
+                pH=7.15,
+                electrical_conductivity=7.00
+            )
+            res_trailing = ingest_sensor_reading(payload=trailing_payload, db=self.db)
+            self.assertIsInstance(res_trailing, JSONResponse)
+            self.assertEqual(res_trailing.status_code, 200)
+            body = json.loads(res_trailing.body.decode("utf-8"))
+            self.assertEqual(body["status"], "ignored")
+            self.assertEqual(body["message"], "No active test session")
+
+        # 5. Verify database storage: exactly 5 sensor readings and 5 detection results
+        db_readings = self.db.query(SensorReading).filter(SensorReading.cow_id == self.cow.cow_id).all()
+        db_results = self.db.query(DetectionResult).filter(DetectionResult.cow_id == self.cow.cow_id).all()
+        self.assertEqual(len(db_readings), 5)
+        self.assertEqual(len(db_results), 5)
+
+        # 6. Verify Cow Profile History: returns exactly those 5 readings
+        cow_profile = CowController.get_cow_profile(
+            cow_id=self.cow.cow_id,
+            current_farmer=self.farmer,
+            db=self.db
+        )
+        self.assertEqual(len(cow_profile.history), 5)
+        self.assertEqual(cow_profile.history[0].reading_id, processed_responses[4].reading_id)
+        self.assertEqual(cow_profile.history[-1].reading_id, processed_responses[0].reading_id)
+
+        # 7. Alert Deduplication: exactly 1 unread alert created across all 5 positive readings
+        db_alerts = (
+            self.db.query(Alert)
+            .join(DetectionResult, Alert.result_id == DetectionResult.result_id)
+            .filter(DetectionResult.cow_id == self.cow.cow_id, Alert.status == "Unread")
+            .all()
+        )
+        self.assertEqual(len(db_alerts), 1)
+
+        # 8. AlertController.get_alerts returns only 1 alert for this farmer
+        farmer_alerts = AlertController.get_alerts(current_farmer=self.farmer, db=self.db)
+        cow_alerts = [a for a in farmer_alerts if a.cow_tag == self.cow.cow_tag]
+        self.assertEqual(len(cow_alerts), 1)
+        self.assertEqual(cow_alerts[0].status, "Unread")
+
+        # 9. GET /api/cows/{cow_id}/latest-result still returns the 5th reading cleanly after session closed
+        final_poll = TestController.poll_latest_result(
+            cow_id=self.cow.cow_id,
+            current_farmer=self.farmer,
+            db=self.db
+        )
+        self.assertIsInstance(final_poll, DetectionResultResponse)
+        self.assertEqual(final_poll.reading_id, processed_responses[4].reading_id)
+        self.assertEqual(final_poll.result_id, processed_responses[4].result_id)
+        self.assertEqual(final_poll.health_status, "At Risk")
+        self.assertEqual(final_poll.diagnostic_status, "Mastitis Present")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -80,21 +80,33 @@ class IoTController:
             cow.health_status = new_health_status
             cow.last_tested = eat_now
 
-            # 6. Generate Alert if Mastitis is detected
+            # 6. Generate Alert if Mastitis is detected and no unread alert already exists for this cow
             if prediction_label == "Mastitis Present" or new_health_status == "At Risk":
-                alert_message = (
-                    f"{cow.cow_tag}: Mastitis Present - "
-                    f"Temp: {payload.temperature:.1f}°C, pH: {payload.pH:.2f}, "
-                    f"Cond: {payload.electrical_conductivity:.2f} mS/cm."
+                # Deduplication safeguard: check if an unread alert already exists for target cow_id
+                existing_unread = (
+                    db.query(Alert)
+                    .join(DetectionResult, Alert.result_id == DetectionResult.result_id)
+                    .filter(
+                        DetectionResult.cow_id == target_cow_id,
+                        Alert.status == "Unread"
+                    )
+                    .first()
                 )
-                alert = Alert(
-                    result_id=detection_result.result_id,
-                    farmer_id=cow.farmer_id,
-                    message=alert_message,
-                    status="Unread",
-                    send_time=eat_now
-                )
-                db.add(alert)
+                if not existing_unread:
+                    alert_message = (
+                        f"{cow.cow_tag}: Mastitis Present - "
+                        f"Temp: {payload.temperature:.1f}°C, pH: {payload.pH:.2f}, "
+                        f"Cond: {payload.electrical_conductivity:.2f} mS/cm."
+                    )
+                    alert = Alert(
+                        result_id=detection_result.result_id,
+                        farmer_id=cow.farmer_id,
+                        message=alert_message,
+                        status="Unread",
+                        send_time=eat_now
+                    )
+                    db.add(alert)
+                    db.flush()
 
             # 7. Atomically commit the entire transaction
             db.commit()

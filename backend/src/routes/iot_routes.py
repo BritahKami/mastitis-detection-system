@@ -46,14 +46,11 @@ def ingest_sensor_reading(
        - Updates latest reading in session_manager during the 3-minute session window.
        - Does NOT clear the session prematurely, allowing ongoing telemetry during test.
     """
-    # 1. Retrieve active cow_id from 3-minute session lock
+    # 1. Retrieve active cow_id from 5-reading bounded session lock
     active_cow_id = session_manager.get_active_cow_id()
 
-    # 2. Use session lock cow_id; fallback to payload.cow_id if present
-    target_cow_id = active_cow_id or payload.cow_id
-
-    # 3. If NO active session exists (idle ESP32 telemetry between tests), return 200 OK ignored
-    if not target_cow_id:
+    # 2. If NO active session exists (idle ESP32 telemetry or 5 readings completed), return 200 OK ignored
+    if not active_cow_id:
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -62,15 +59,19 @@ def ingest_sensor_reading(
             }
         )
 
-    # 4. Delegate to controller using the resolved target_cow_id
+    target_cow_id = active_cow_id
+
+    # 3. Delegate to controller using the resolved target_cow_id
     response = IoTController.process_sensor_reading(
         payload=payload,
         db=db,
         active_cow_id=target_cow_id
     )
 
-    # 5. Keep or update latest reading during the session window (do NOT clear session prematurely)
-    session_manager.update_latest_reading({
+    # 4. Record valid reading, update latest telemetry, and increment session counter.
+    # Once the 5th valid reading is processed, session_manager automatically clears/closes
+    # the active test session lock so trailing 5-second ESP32 packets are ignored.
+    session_manager.record_reading({
         "reading_id": response.reading_id,
         "result_id": response.result_id,
         "temperature": payload.temperature,
