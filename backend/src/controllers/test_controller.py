@@ -113,6 +113,7 @@ class TestController:
                 sr.electrical_conductivity,
                 sr.reading_time,
                 dr.prediction,
+                dr.confidence_score,
                 dr.detection_time,
                 c.health_status
             FROM Detection_Result dr
@@ -136,6 +137,7 @@ class TestController:
         cond_val = float(latest_record["electrical_conductivity"])
         pred_val = str(latest_record["prediction"])
         health_val = str(latest_record["health_status"])
+        conf_val = float(latest_record["confidence_score"]) if latest_record["confidence_score"] is not None else None
 
         return DetectionResultResponse(
             status="Completed",
@@ -144,6 +146,7 @@ class TestController:
             health_status=health_val,
             diagnostic_status=pred_val,
             prediction=pred_val,
+            confidence_score=conf_val,
             temperature=temp_val,
             pH=ph_val,
             electrical_conductivity=cond_val,
@@ -159,6 +162,7 @@ class TestController:
                 electrical_conductivity=cond_val,
                 reading_time=latest_record["reading_time"],
                 prediction=pred_val,
+                confidence_score=conf_val,
                 detection_time=latest_record["detection_time"]
             )
         )

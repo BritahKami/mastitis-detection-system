@@ -1,20 +1,58 @@
+import re
 from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 from src.models.db_models import Farmer, Cow, SensorReading
 from src.models.schemas import (
     CowRegisterRequest,
     CowResponse,
     CowDetailResponse,
-    HistoricalTestRecord
+    HistoricalTestRecord,
+    NextTagResponse
 )
 
 
 class CowController:
     """
-    Controller handling Dairy Cow Registration, Listing, and Detailed Profile retrieval.
+    Controller handling Dairy Cow Registration, Listing, Auto-tag generation,
+    and Detailed Profile retrieval.
     """
+
+    @staticmethod
+    def compute_next_tag(current_farmer: Farmer, db: Session) -> str:
+        """
+        Inspects existing cow_tag values for the authenticated farmer matching
+        the COW-XXX pattern (e.g., COW-001 through COW-011), finds the highest numeric
+        suffix, increments it by 1, and returns the zero-padded next tag (e.g., COW-012),
+        defaulting to COW-001 if the farmer has no cows yet.
+        """
+        cows = (
+            db.query(Cow.cow_tag)
+            .filter(Cow.farmer_id == current_farmer.farmer_id)
+            .all()
+        )
+        max_num = 0
+        pattern = re.compile(r"^COW-(\d+)$", re.IGNORECASE)
+        for (tag,) in cows:
+            if not tag:
+                continue
+            match = pattern.match(tag.strip())
+            if match:
+                val = int(match.group(1))
+                if val > max_num:
+                    max_num = val
+        next_num = max_num + 1
+        return f"COW-{next_num:03d}"
+
+    @staticmethod
+    def get_next_cow_tag(current_farmer: Farmer, db: Session) -> NextTagResponse:
+        """
+        Returns the next sequential zero-padded cow tag (e.g. COW-012).
+        """
+        next_tag = CowController.compute_next_tag(current_farmer, db)
+        return NextTagResponse(next_tag=next_tag)
 
     @staticmethod
     def register_cow(
@@ -24,18 +62,47 @@ class CowController:
     ) -> CowResponse:
         """
         Registers a new cow for the authenticated farmer.
-        Defaults health_status to 'Healthy' per database schema specification.
+        - Auto-assigns the next sequential COW-XXX tag if cow_tag is omitted or empty.
+        - Validates uniqueness cleanly if cow_tag is supplied.
+        - Defaults health_status to 'Pending'.
         """
+        tag_val = payload.cow_tag.strip() if payload.cow_tag and payload.cow_tag.strip() else None
+
+        if not tag_val:
+            tag_val = CowController.compute_next_tag(current_farmer, db)
+        else:
+            # Validate uniqueness cleanly for this farmer
+            existing = (
+                db.query(Cow)
+                .filter(
+                    Cow.farmer_id == current_farmer.farmer_id,
+                    Cow.cow_tag.ilike(tag_val)
+                )
+                .first()
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cow with tag '{tag_val}' is already registered in your herd."
+                )
+
         new_cow = Cow(
             farmer_id=current_farmer.farmer_id,
-            cow_tag=payload.cow_tag.strip(),
+            cow_tag=tag_val,
             breed=payload.breed.strip(),
             age=payload.age,
             health_status="Pending"
         )
-        db.add(new_cow)
-        db.commit()
-        db.refresh(new_cow)
+        try:
+            db.add(new_cow)
+            db.commit()
+            db.refresh(new_cow)
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cow with tag '{tag_val}' is already registered in your herd."
+            )
 
         return CowResponse.model_validate(new_cow)
 
@@ -78,7 +145,7 @@ class CowController:
         """
         Fetches the complete cow profile and utilizes a SQL JOIN between
         Sensor_Reading and Detection_Result to return an array of all historical test records
-        without query limit or slicing truncation, ordered newest to oldest.
+        with confidence_score, ordered newest to oldest.
         """
         # 1. Enforce farmer ownership
         cow = (
@@ -102,6 +169,7 @@ class CowController:
                 sr.electrical_conductivity,
                 sr.reading_time,
                 dr.prediction,
+                dr.confidence_score,
                 dr.detection_time
             FROM Sensor_Reading sr
             LEFT JOIN Detection_Result dr ON sr.reading_id = dr.reading_id
@@ -114,6 +182,7 @@ class CowController:
         history_records: List[HistoricalTestRecord] = []
         for row in rows:
             pred = row["prediction"]
+            conf = float(row["confidence_score"]) if row["confidence_score"] is not None else None
             history_records.append(
                 HistoricalTestRecord(
                     reading_id=row["reading_id"],
@@ -123,6 +192,7 @@ class CowController:
                     electrical_conductivity=float(row["electrical_conductivity"]),
                     reading_time=row["reading_time"],
                     prediction=pred,
+                    confidence_score=conf,
                     diagnostic_status=pred,
                     detection_time=row["detection_time"]
                 )

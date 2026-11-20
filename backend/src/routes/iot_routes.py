@@ -78,6 +78,7 @@ def ingest_sensor_reading(
         "pH": payload.pH,
         "electrical_conductivity": payload.electrical_conductivity,
         "prediction": response.prediction,
+        "confidence_score": response.confidence_score,
         "cow_health_status": response.cow_health_status
     })
 

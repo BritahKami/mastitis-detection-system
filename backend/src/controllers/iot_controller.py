@@ -59,7 +59,7 @@ class IoTController:
             db.flush()  # Flushes to obtain auto-generated reading_id
 
             # 3. ML Inference using exact feature ordering
-            prediction_label = ml_service.predict(
+            prediction_label, confidence_score = ml_service.predict(
                 temperature=payload.temperature,
                 ph=payload.pH,
                 electrical_conductivity=payload.electrical_conductivity
@@ -70,6 +70,7 @@ class IoTController:
                 cow_id=target_cow_id,
                 reading_id=sensor_reading.reading_id,
                 prediction=prediction_label,
+                confidence_score=confidence_score,
                 detection_time=eat_now
             )
             db.add(detection_result)
@@ -116,6 +117,7 @@ class IoTController:
                 reading_id=sensor_reading.reading_id,
                 result_id=detection_result.result_id,
                 prediction=prediction_label,
+                confidence_score=confidence_score,
                 cow_health_status=new_health_status
             )
 

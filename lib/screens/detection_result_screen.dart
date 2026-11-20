@@ -327,6 +327,10 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 24),
+
+          // Section 4: Model Confidence
+          _buildConfidenceCard(res.confidenceScore),
           const SizedBox(height: 32),
 
           // Actions: CustomPrimaryButton ("Back to dashboard")
@@ -339,6 +343,123 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
             ),
             onPressed: () => _handleBackToDashboard(context),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConfidenceCard(double? confidenceScore) {
+    final bool hasScore = confidenceScore != null;
+    final double score = hasScore ? confidenceScore : 0.0;
+    final bool isLowConfidence = hasScore && score < 70.0;
+
+    final Color barColor = !hasScore
+        ? AppColors.borderNeutral
+        : (isLowConfidence ? Colors.amber.shade700 : AppColors.primaryTheme);
+
+    final String displayScore = hasScore
+        ? 'Model Confidence: ${score.toStringAsFixed(1)}%'
+        : 'Model Confidence: N/A';
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppRadii.containerBorderRadius,
+        border: Border.all(
+          color: AppColors.borderNeutral,
+          width: 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                displayScore,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              if (hasScore)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isLowConfidence ? AppColors.badgeAtRiskBg : AppColors.badgeHealthyBg,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isLowConfidence ? 'Uncertain' : 'High Certainty',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isLowConfidence ? AppColors.badgeAtRiskText : AppColors.badgeHealthyText,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4.0),
+            child: LinearProgressIndicator(
+              value: hasScore ? (score / 100.0).clamp(0.0, 1.0) : 0.0,
+              minHeight: 8.0,
+              backgroundColor: const Color(0xFFEAEAEA),
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            "Indicates the model's prediction certainty based on the sensor readings.",
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (isLowConfidence) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10.0),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: Colors.amber.shade300,
+                  width: 1.0,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber.shade900,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Low confidence score (< 70%). It is recommended to clean the sensor probes with distilled water and re-test.',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

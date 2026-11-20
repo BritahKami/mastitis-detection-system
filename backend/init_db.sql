@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS Cow (
     last_tested DATETIME NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmer_id) REFERENCES Farmer(farmer_id) ON DELETE CASCADE,
+    UNIQUE KEY uq_farmer_cow_tag (farmer_id, cow_tag),
     INDEX idx_cow_farmer (farmer_id),
     INDEX idx_cow_status (health_status),
     INDEX idx_cow_last_tested (last_tested)
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS Detection_Result (
     cow_id INT NOT NULL,
     reading_id INT UNIQUE NOT NULL,
     prediction ENUM('Mastitis Present', 'Mastitis Absent') NOT NULL,
+    confidence_score DECIMAL(5,2) NULL,
     detection_time DATETIME NOT NULL,
     FOREIGN KEY (cow_id) REFERENCES Cow(cow_id) ON DELETE CASCADE,
     CONSTRAINT fk_detection_reading FOREIGN KEY (reading_id) REFERENCES Sensor_Reading(reading_id) ON DELETE CASCADE,

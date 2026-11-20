@@ -3,7 +3,7 @@ class ApiConstants {
   ApiConstants._();
 
   /// API Base URL configured for physical phone & Android emulator connectivity via hotspot
-  static const String baseUrl = 'http://192.168.5.248:8000';
+  static const String baseUrl = 'http://192.168.4.234:8000';
 
   // Authentication endpoints
   static const String loginEndpoint = '$baseUrl/api/auth/login';
@@ -17,6 +17,7 @@ class ApiConstants {
 
   // Cow management endpoints
   static const String cowsEndpoint = '$baseUrl/api/cows';
+  static const String nextCowTagEndpoint = '$baseUrl/api/cows/next-tag';
   static String cowDetailsEndpoint(dynamic cowId) => '$baseUrl/api/cows/$cowId';
 
   // Diagnostic testing endpoints

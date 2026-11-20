@@ -17,6 +17,7 @@ class TestHistoryRecord {
   final double pH;
   final double electricalConductivity;
   final String diagnosticOutcome;
+  final double? confidenceScore;
 
   const TestHistoryRecord({
     this.resultId,
@@ -28,6 +29,7 @@ class TestHistoryRecord {
     this.pH = 0.0,
     this.electricalConductivity = 0.0,
     this.diagnosticOutcome = '',
+    this.confidenceScore,
   });
 
   String get label => mastitisPresent ? 'Mastitis present' : 'Mastitis absent';
@@ -71,6 +73,9 @@ class TestHistoryRecord {
     final num? condNum = (json['electrical_conductivity'] ??
         json['electricalConductivity'] ??
         json['conductivity']) as num?;
+    final num? confNum = (json['confidence_score'] ??
+        json['confidenceScore'] ??
+        json['confidence']) as num?;
 
     final resId = json['result_id'] is int
         ? json['result_id'] as int
@@ -91,6 +96,7 @@ class TestHistoryRecord {
       diagnosticOutcome: rawPred.isNotEmpty
           ? rawPred
           : (isPresent ? 'Mastitis Present' : 'Mastitis Absent'),
+      confidenceScore: confNum?.toDouble(),
     );
   }
 }
@@ -213,6 +219,7 @@ class DetectionResult {
   final double conductivity;
   final StatusType status;
   final String predictionLabel;
+  final double? confidenceScore;
 
   const DetectionResult({
     required this.tagNumber,
@@ -222,6 +229,7 @@ class DetectionResult {
     required this.conductivity,
     required this.status,
     required this.predictionLabel,
+    this.confidenceScore,
   });
 
   factory DetectionResult.fromJson(Map<String, dynamic> json) {
@@ -254,6 +262,12 @@ class DetectionResult {
         source['conductivity'] as num? ??
         json['electrical_conductivity'] as num? ??
         json['conductivity'] as num?;
+    final num? rawConf = source['confidence_score'] as num? ??
+        json['confidence_score'] as num? ??
+        source['confidenceScore'] as num? ??
+        json['confidenceScore'] as num? ??
+        source['confidence'] as num? ??
+        json['confidence'] as num?;
 
     final double temp = (rawTemp ?? 38.5).toDouble();
     final double phVal = (rawPh ?? 6.65).toDouble();
@@ -295,6 +309,7 @@ class DetectionResult {
       conductivity: condVal,
       status: isMastitisPresent ? StatusType.atRisk : StatusType.healthy,
       predictionLabel: prediction,
+      confidenceScore: rawConf?.toDouble(),
     );
   }
 
@@ -307,6 +322,7 @@ class DetectionResult {
       conductivity: 6.42,
       status: StatusType.atRisk,
       predictionLabel: 'Mastitis present',
+      confidenceScore: 92.4,
     );
   }
 
@@ -319,6 +335,7 @@ class DetectionResult {
       conductivity: 5.12,
       status: StatusType.healthy,
       predictionLabel: 'Mastitis absent',
+      confidenceScore: 95.8,
     );
   }
 }

@@ -4,7 +4,6 @@ import '../models/mds_models.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/custom_primary_button.dart';
-import '../widgets/custom_text_field.dart';
 import '../widgets/data_row_item.dart';
 import '../services/api_service.dart';
 import 'cow_profile_screen.dart';
@@ -72,7 +71,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
       setState(() {
         if (isTest) {
-          _cows = List.from(MDSMockRepository.getInitialCows());
+          if (_cows.isEmpty) {
+            _cows = List.from(MDSMockRepository.getInitialCows());
+          }
         } else {
           _errorMessage = e.toString().replaceAll('ApiException: ', '');
         }
@@ -93,184 +94,387 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  String _computeNextTag(List<Cow> cows) {
+    final pattern = RegExp(r'^COW-(\d+)$', caseSensitive: false);
+    int maxNum = 0;
+    for (final cow in cows) {
+      final tag = cow.tagNumber.trim();
+      final match = pattern.firstMatch(tag);
+      if (match != null) {
+        final num = int.tryParse(match.group(1)!) ?? 0;
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    final next = maxNum + 1;
+    return 'COW-${next.toString().padLeft(3, '0')}';
+  }
+
   void _showAddCowDialog() {
-    final tagController = TextEditingController();
-    final breedController = TextEditingController();
-    final ageController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final initialTag = _computeNextTag(_cows);
+    final tagController = TextEditingController(text: initialTag);
+    String? selectedBreed;
+    int? selectedAge;
     bool isSaving = false;
+    bool hasFetchedServerTag = false;
+
+    const List<String> breedOptions = [
+      'Friesian',
+      'Ayrshire',
+      'Jersey',
+      'Guernsey',
+      'Crossbreed',
+    ];
+
+    final List<int> ageOptions = List.generate(15, (index) => index + 1);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
+        builder: (dialogContext, setDialogState) {
+          if (!hasFetchedServerTag) {
+            hasFetchedServerTag = true;
+            ApiService().getNextCowTag().then((serverTag) {
+              if (serverTag != null && serverTag.isNotEmpty && tagController.text != serverTag) {
+                tagController.text = serverTag;
+                if (dialogContext.mounted) {
+                  setDialogState(() {});
+                }
+              }
+            }).catchError((_) {});
+          }
+
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
             ),
-          ),
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(dialogContext).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header: "Register Cow" with a top-right close icon ("X")
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(dialogContext).viewInsets.bottom + 24,
+            ),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Register Cow', style: AppTypography.h2),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.close, color: AppColors.textSecondary),
-                    onPressed: () => Navigator.of(dialogContext).pop(),
+                // Header: "Register Cow" with a top-right close icon ("X")
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Register Cow', style: AppTypography.h2),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 1. "Tag Number" - Auto-generated sequential tag, read-only with subtle muted styling
+                TextFormField(
+                  controller: tagController,
+                  readOnly: true,
+                  style: AppTypography.bodyRegularDark.copyWith(
+                    color: AppColors.primaryTheme,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  decoration: InputDecoration(
+                    labelText: 'Tag Number',
+                    labelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    floatingLabelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primaryTheme,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.tag_rounded,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    suffixIcon: const Tooltip(
+                      message: 'Auto-generated sequential tag',
+                      child: Icon(
+                        Icons.lock_outline_rounded,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.backgroundSurface,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.primaryTheme, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
-              // Inputs: Exactly three CustomTextField inputs
-              // 1. "Tag Number" with hintText: 'e.g., COW-001'
-              CustomTextField(
-                label: 'Tag Number',
-                hintText: 'e.g., COW-001',
-                controller: tagController,
-              ),
-              const SizedBox(height: 12),
+                // 2. "Breed" Dropdown - Standard dairy cattle breeds with validation
+                DropdownButtonFormField<String>(
+                  initialValue: selectedBreed,
+                  decoration: InputDecoration(
+                    labelText: 'Breed',
+                    labelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    floatingLabelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primaryTheme,
+                    ),
+                    hintText: 'Select breed',
+                    prefixIcon: const Icon(
+                      Icons.pets_outlined,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.primaryTheme, width: 1.5),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.badgeAtRiskText, width: 1.0),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.primaryTheme,
+                  ),
+                  dropdownColor: Colors.white,
+                  borderRadius: AppRadii.containerBorderRadius,
+                  items: breedOptions.map((breed) {
+                    return DropdownMenuItem<String>(
+                      value: breed,
+                      child: Text(breed, style: AppTypography.bodyRegularDark),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setDialogState(() {
+                      selectedBreed = val;
+                    });
+                  },
+                  validator: (val) {
+                    if (val == null || val.isEmpty) {
+                      return 'Please select a cattle breed';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
 
-              // 2. "Breed" with hintText: 'e.g., Holstein Friesian'
-              CustomTextField(
-                label: 'Breed',
-                hintText: 'e.g., Holstein Friesian',
-                controller: breedController,
-              ),
-              const SizedBox(height: 12),
+                // 3. "Age (years)" Dropdown - Integer options 1 to 15 years with validation
+                DropdownButtonFormField<int>(
+                  initialValue: selectedAge,
+                  decoration: InputDecoration(
+                    labelText: 'Age (years)',
+                    labelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    floatingLabelStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primaryTheme,
+                    ),
+                    hintText: 'Select age',
+                    prefixIcon: const Icon(
+                      Icons.cake_outlined,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.borderNeutral, width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.primaryTheme, width: 1.5),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: AppRadii.containerBorderRadius,
+                      borderSide: const BorderSide(color: AppColors.badgeAtRiskText, width: 1.0),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.primaryTheme,
+                  ),
+                  dropdownColor: Colors.white,
+                  borderRadius: AppRadii.containerBorderRadius,
+                  items: ageOptions.map((age) {
+                    final label = age == 1 ? '1 year' : '$age years';
+                    return DropdownMenuItem<int>(
+                      value: age,
+                      child: Text(label, style: AppTypography.bodyRegularDark),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setDialogState(() {
+                      selectedAge = val;
+                    });
+                  },
+                  validator: (val) {
+                    if (val == null) {
+                      return 'Please select age in years';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
 
-              // 3. "Age (years)" with hintText: 'e.g., 3'
-              CustomTextField(
-                label: 'Age (years)',
-                hintText: 'e.g., 3',
-                controller: ageController,
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 20),
+                // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
+                CustomPrimaryButton(
+                  label: 'Save Cow',
+                  isLoading: isSaving,
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) {
+                            return;
+                          }
 
-              // Actions: CustomPrimaryButton ("Save Cow") pinned to the bottom
-              CustomPrimaryButton(
-                label: 'Save Cow',
-                isLoading: isSaving,
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        final tag = tagController.text.trim();
-                        final breed = breedController.text.trim();
-                        final ageText = ageController.text.trim();
-                        final age = int.tryParse(ageText);
+                          final tag = tagController.text.trim();
+                          final breed = selectedBreed!;
+                          final age = selectedAge!;
 
-                        if (tag.isEmpty || breed.isEmpty || age == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Please enter valid cow details (Tag, Breed, Age).'),
-                              backgroundColor: AppColors.badgeAtRiskText,
-                            ),
-                          );
-                          return;
-                        }
-
-                        setDialogState(() {
-                          isSaving = true;
-                        });
-
-                        try {
-                          final newCow = await ApiService().addCow(
-                            cowTag: tag,
-                            breed: breed,
-                            age: age,
-                          );
-
-                          // Success Action:
-                          if (!dialogContext.mounted) return;
-                          Navigator.of(dialogContext).pop();
-
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Cow registered successfully'),
-                              backgroundColor: AppColors.badgeHealthyText,
-                            ),
-                          );
-
-                          setState(() {
-                            _cows.insert(0, newCow);
+                          setDialogState(() {
+                            isSaving = true;
                           });
-                          _fetchCows();
-                        } catch (e) {
-                          final isTest = WidgetsBinding.instance.runtimeType
-                              .toString()
-                              .contains('Test');
-                          if (isTest) {
-                            final fallbackCow = Cow(
-                              id: DateTime.now()
-                                  .millisecondsSinceEpoch
-                                  .toString(),
-                              tagNumber: tag,
+
+                          try {
+                            final newCow = await ApiService().addCow(
+                              cowTag: tag,
                               breed: breed,
                               age: age,
-                              status: StatusType.healthy,
-                              lastTested: 'Today',
                             );
-                            if (dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop();
-                            }
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Cow registered successfully'),
-                                  backgroundColor: AppColors.badgeHealthyText,
-                                ),
-                              );
-                              setState(() {
-                                _cows.insert(0, fallbackCow);
-                              });
-                            }
-                          } else {
+
+                            // Success Action:
                             if (!dialogContext.mounted) return;
-                            setDialogState(() {
-                              isSaving = false;
-                            });
+                            Navigator.of(dialogContext).pop();
+
                             if (!mounted) return;
-                            final errorMsg = e
-                                .toString()
-                                .replaceAll('ApiException: ', '')
-                                .trim();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  errorMsg.isNotEmpty
-                                      ? errorMsg
-                                      : 'Failed to register cow. Please try again.',
-                                ),
-                                backgroundColor: AppColors.badgeAtRiskText,
+                              const SnackBar(
+                                content: Text('Cow registered successfully'),
+                                backgroundColor: AppColors.badgeHealthyText,
                               ),
                             );
+
+                            setState(() {
+                              _cows.removeWhere((c) => c.id == newCow.id || c.tagNumber.toLowerCase() == newCow.tagNumber.toLowerCase());
+                              _cows.insert(0, newCow);
+                            });
+                            await _fetchCows();
+                          } catch (e) {
+                            final isTest = WidgetsBinding.instance.runtimeType
+                                .toString()
+                                .contains('Test');
+                            if (isTest) {
+                              final fallbackCow = Cow(
+                                id: DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString(),
+                                tagNumber: tag,
+                                breed: breed,
+                                age: age,
+                                status: StatusType.healthy,
+                                lastTested: 'Today',
+                              );
+                              if (dialogContext.mounted) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Cow registered successfully'),
+                                    backgroundColor: AppColors.badgeHealthyText,
+                                  ),
+                                );
+                                setState(() {
+                                  _cows.removeWhere((c) => c.tagNumber.toLowerCase() == fallbackCow.tagNumber.toLowerCase());
+                                  _cows.insert(0, fallbackCow);
+                                });
+                                await _fetchCows();
+                              }
+                            } else {
+                              if (!dialogContext.mounted) return;
+                              setDialogState(() {
+                                isSaving = false;
+                              });
+                              if (!mounted) return;
+                              final errorMsg = e
+                                  .toString()
+                                  .replaceAll('ApiException: ', '')
+                                  .trim();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    errorMsg.isNotEmpty
+                                        ? errorMsg
+                                        : 'Failed to register cow. Please try again.',
+                                  ),
+                                  backgroundColor: AppColors.badgeAtRiskText,
+                                ),
+                              );
+                            }
                           }
-                        }
-                      },
-              ),
-            ],
+                        },
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {

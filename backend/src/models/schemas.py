@@ -73,10 +73,14 @@ class FarmerProfileResponse(BaseModel):
 # =============================================================================
 
 class CowRegisterRequest(BaseModel):
-    cow_tag: str = Field(..., min_length=1, max_length=20, description="Unique tag/ear tag number")
+    cow_tag: Optional[str] = Field(None, max_length=20, description="Unique tag/ear tag number (auto-assigned if omitted)")
     breed: str = Field(..., min_length=1, max_length=50, description="Breed of the cow")
     age: int = Field(..., ge=0, le=30, description="Age in years")
     health_status: str = Field(default="Pending", description="Initial health status")
+
+
+class NextTagResponse(BaseModel):
+    next_tag: str
 
 
 class CowResponse(BaseModel):
@@ -100,6 +104,7 @@ class HistoricalTestRecord(BaseModel):
     electrical_conductivity: float
     reading_time: datetime
     prediction: Optional[str] = None
+    confidence_score: Optional[float] = None
     diagnostic_status: Optional[str] = None
     detection_time: Optional[datetime] = None
 
@@ -147,6 +152,7 @@ class LatestResultPayload(BaseModel):
     electrical_conductivity: float
     reading_time: datetime
     prediction: str
+    confidence_score: Optional[float] = None
     detection_time: datetime
 
 
@@ -160,6 +166,7 @@ class DetectionResultResponse(BaseModel):
     electrical_conductivity: float
     diagnostic_status: str
     prediction: str
+    confidence_score: Optional[float] = None
     health_status: str
     reading_time: datetime
     detection_time: datetime
@@ -187,6 +194,7 @@ class IoTProcessingResponse(BaseModel):
     reading_id: int
     result_id: int
     prediction: str
+    confidence_score: Optional[float] = None
     cow_health_status: str
 
 

@@ -577,9 +577,11 @@ Future<void> performLoginFlow(WidgetTester tester) async {
       expect(find.textContaining('pH:'), findsOneWidget);
       expect(find.textContaining('Cond:'), findsOneWidget);
       expect(find.text('Diagnostic Status'), findsOneWidget);
+      expect(find.textContaining('Model Confidence:'), findsOneWidget);
       expect(find.text('Back to dashboard'), findsOneWidget);
 
       // Tap "Back to dashboard"
+      await tester.ensureVisible(find.text('Back to dashboard'));
       await tester.tap(find.text('Back to dashboard'));
       await tester.pumpAndSettle();
 
@@ -718,6 +720,7 @@ Future<void> performLoginFlow(WidgetTester tester) async {
       expect(find.text('Detection result'), findsOneWidget);
 
       // 4. Tap the "Back to dashboard" button
+      await tester.ensureVisible(find.text('Back to dashboard'));
       await tester.tap(find.text('Back to dashboard'));
       await tester.pumpAndSettle();
 
@@ -926,7 +929,7 @@ Future<void> performLoginFlow(WidgetTester tester) async {
 
   group('Dashboard: Add Cow Modal Bottom Sheet', () {
     testWidgets(
-        'Modal opens with exactly three CustomTextFields and NO Initial Status dropdown',
+        'Modal opens with auto-generated read-only Tag Number, Breed dropdown, and Age dropdown',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -943,15 +946,18 @@ Future<void> performLoginFlow(WidgetTester tester) async {
       expect(find.text('Register Cow'), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
 
-      // Inputs: Contains exactly three CustomTextField inputs
-      expect(find.byType(CustomTextField), findsNWidgets(3));
+      // Tag number TextFormField is pre-filled and readOnly
       expect(find.text('Tag Number'), findsOneWidget);
+      final tagFinder = find.byType(TextFormField);
+      expect(tagFinder, findsOneWidget);
+      final tagWidget = tester.widget<TextFormField>(tagFinder);
+      expect(tagWidget.initialValue != null || tagWidget.controller?.text.isNotEmpty == true, isTrue);
+
+      // DropdownButtonFormField widgets for Breed and Age
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<int>), findsOneWidget);
       expect(find.text('Breed'), findsOneWidget);
       expect(find.text('Age (years)'), findsOneWidget);
-
-      // CRITICAL: Ensure the "Initial Status" dropdown is completely removed
-      expect(find.text('Initial Status: '), findsNothing);
-      expect(find.byType(DropdownButton<StatusType>), findsNothing);
 
       // Actions: CustomPrimaryButton ("Save Cow") pinned to bottom
       expect(find.text('Save Cow'), findsOneWidget);
@@ -962,7 +968,7 @@ Future<void> performLoginFlow(WidgetTester tester) async {
       expect(find.text('Register Cow'), findsNothing);
     });
 
-    testWidgets('Save Cow adds new cow to the list', (tester) async {
+    testWidgets('Save Cow adds new cow to the list with dropdown selections', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: DashboardScreen(showBottomNav: false),
@@ -973,21 +979,24 @@ Future<void> performLoginFlow(WidgetTester tester) async {
       await tester.tap(find.text('+ Add cow'));
       await tester.pumpAndSettle();
 
-      // Enter a unique tag number
-      await tester.enterText(
-          find.widgetWithText(CustomTextField, 'Tag Number'),
-          'Tag 999');
-      await tester.enterText(
-          find.widgetWithText(CustomTextField, 'Breed'), 'Jersey Special');
-      await tester.enterText(
-          find.widgetWithText(CustomTextField, 'Age (years)'), '4');
+      // Select Breed 'Jersey'
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jersey').last);
+      await tester.pumpAndSettle();
+
+      // Select Age '4 years'
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4 years').last);
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Save Cow'));
       await tester.pumpAndSettle();
 
       // Cow modal dismissed and new cow appears on the list
       expect(find.text('Register Cow'), findsNothing);
-      expect(find.text('Tag 999'), findsOneWidget);
+      expect(find.text('COW-001'), findsWidgets);
     });
   });
 

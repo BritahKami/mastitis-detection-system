@@ -342,6 +342,33 @@ class ApiService {
   // Dairy Cow Management APIs
   // ===========================================================================
 
+  /// Retrieves the next sequential zero-padded cow tag number (e.g., 'COW-012')
+  /// strictly scoped to the authenticated farmer. Returns null on connection error
+  /// so caller falls back to dynamic local calculation from that farmer's cows list.
+  Future<String?> getNextCowTag() async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await _client.get(
+        Uri.parse(ApiConstants.nextCowTagEndpoint),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = _parseResponseBody(response);
+        final tag = data['next_tag']?.toString() ?? data['tag']?.toString();
+        if (tag != null && tag.isNotEmpty) {
+          return tag;
+        }
+      } else if (response.statusCode == 401) {
+        await clearAuth();
+        throw const ApiException('Session expired. Please log in again.');
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+    }
+    return null;
+  }
+
   /// Retrieves list of all registered cows owned by the authenticated farmer
   Future<List<Cow>> getCows() async {
     try {

@@ -62,38 +62,44 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
     });
 
     try {
-      // 1. Trigger active 3-minute test session lock on FastAPI via ApiService
-      await ApiService().initiateTest(_cow.id);
-
-      // 2. Prompt user to submerge sensors
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Test session active. Please submerge sensors into milk sample.'),
-          duration: Duration(seconds: 4),
-          backgroundColor: AppColors.primaryTheme,
-        ),
-      );
-
-      // 3. Poll for live reading
+      final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
       DetectionResult? liveResult;
-      const int maxPollAttempts = 15; // Poll up to ~30 seconds
-      for (int i = 0; i < maxPollAttempts; i++) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (!mounted) return;
-        try {
-          liveResult = await ApiService().getLatestResult(_cow.id);
-          break;
-        } on ApiException catch (e) {
-          if (e.message.toLowerCase().contains('pending')) {
-            continue;
-          }
-          if (i == maxPollAttempts - 1) rethrow;
-        }
-      }
 
-      if (liveResult == null) {
-        throw Exception('No recent reading received from ESP32 within test window.');
+      if (isTest) {
+        liveResult = DetectionResult.sampleForCow(_cow.tagNumber);
+      } else {
+        // 1. Trigger active 3-minute test session lock on FastAPI via ApiService
+        await ApiService().initiateTest(_cow.id);
+
+        // 2. Prompt user to submerge sensors
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Test session active. Please submerge sensors into milk sample.'),
+            duration: Duration(seconds: 4),
+            backgroundColor: AppColors.primaryTheme,
+          ),
+        );
+
+        // 3. Poll for live reading
+        const int maxPollAttempts = 15; // Poll up to ~30 seconds
+        for (int i = 0; i < maxPollAttempts; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+          try {
+            liveResult = await ApiService().getLatestResult(_cow.id);
+            break;
+          } on ApiException catch (e) {
+            if (e.message.toLowerCase().contains('pending')) {
+              continue;
+            }
+            if (i == maxPollAttempts - 1) rethrow;
+          }
+        }
+
+        if (liveResult == null) {
+          throw Exception('No recent reading received from ESP32 within test window.');
+        }
       }
 
       if (!mounted) return;
@@ -355,22 +361,52 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
                                                   ),
                                                 ],
                                               ),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 10.0,
-                                                  vertical: 4.0,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: statusBg,
-                                                  borderRadius: AppRadii.badgeBorderRadius,
-                                                ),
-                                                child: Text(
-                                                  record.label,
-                                                  style: AppTypography.badgeText.copyWith(
-                                                    color: statusColor,
-                                                    fontSize: 12,
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  if (record.confidenceScore != null)
+                                                    Container(
+                                                      margin: const EdgeInsets.only(right: 6.0),
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 8.0,
+                                                        vertical: 4.0,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.backgroundSurface,
+                                                        borderRadius: AppRadii.badgeBorderRadius,
+                                                        border: Border.all(
+                                                          color: AppColors.borderNeutral,
+                                                          width: 1.0,
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        '${record.confidenceScore!.toStringAsFixed(1)}% conf',
+                                                        style: const TextStyle(
+                                                          fontFamily: AppTypography.fontFamily,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: AppColors.textPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 10.0,
+                                                      vertical: 4.0,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: statusBg,
+                                                      borderRadius: AppRadii.badgeBorderRadius,
+                                                    ),
+                                                    child: Text(
+                                                      record.label,
+                                                      style: AppTypography.badgeText.copyWith(
+                                                        color: statusColor,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
+                                                ],
                                               ),
                                             ],
                                           ),

@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Enum,
     Boolean,
+    UniqueConstraint,
     text,
     func
 )
@@ -50,6 +51,10 @@ class Cow(Base):
     )
     last_tested = Column(DateTime, nullable=True)
 
+    __table_args__ = (
+        UniqueConstraint("farmer_id", "cow_tag", name="uq_farmer_cow_tag"),
+    )
+
     # Relationships
     farmer = relationship("Farmer", back_populates="cows")
     sensor_readings = relationship("SensorReading", back_populates="cow", cascade="all, delete-orphan")
@@ -92,6 +97,7 @@ class DetectionResult(Base):
         Enum("Mastitis Present", "Mastitis Absent", name="prediction_enum"),
         nullable=False
     )
+    confidence_score = Column(Numeric(5, 2), nullable=True)
     detection_time = Column(DateTime, nullable=False)
 
     # Relationships
