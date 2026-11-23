@@ -217,18 +217,25 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
                   size: 18,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'Timestamp: ',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Timestamp: ',
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: res.timestamp,
+                          style: AppTypography.bodyRegular,
+                        ),
+                      ],
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Text(
-                  res.timestamp,
-                  style: AppTypography.bodyRegular,
                 ),
               ],
             ),
@@ -312,19 +319,25 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
                 width: 1.0,
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Diagnostic Status',
-                  style: AppTypography.listRowTitle,
-                ),
-                // Displays StatusBadge dynamically mapped from DetectionResult
-                StatusBadge(
-                  label: res.predictionLabel,
-                  statusType: res.status,
-                ),
-              ],
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8.0,
+                runSpacing: 8.0,
+                children: [
+                  const Text(
+                    'Diagnostic Status',
+                    style: AppTypography.listRowTitle,
+                  ),
+                  // Displays StatusBadge dynamically mapped from DetectionResult
+                  StatusBadge(
+                    label: res.predictionLabel,
+                    statusType: res.status,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -376,19 +389,23 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                displayScore,
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+              Expanded(
+                child: Text(
+                  displayScore,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
-              if (hasScore)
+              if (hasScore) ...[
+                const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: isLowConfidence ? AppColors.badgeAtRiskBg : AppColors.badgeHealthyBg,
                     borderRadius: BorderRadius.circular(4),
@@ -397,12 +414,13 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
                     isLowConfidence ? 'Uncertain' : 'High Certainty',
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: isLowConfidence ? AppColors.badgeAtRiskText : AppColors.badgeHealthyText,
                     ),
                   ),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -476,25 +494,31 @@ class _DetectionResultScreenState extends State<DetectionResultScreen> {
       children: [
         Icon(icon, color: iconColor, size: 20),
         const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: AppColors.textPrimary,
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              text: label,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textPrimary,
+              ),
+              children: [
+                TextSpan(
+                  text: value,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isElevated ? AppColors.badgeAtRiskText : AppColors.primaryTheme,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isElevated ? AppColors.badgeAtRiskText : AppColors.primaryTheme,
-          ),
-        ),
-        const Spacer(),
+        const SizedBox(width: 6),
         if (isElevated)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

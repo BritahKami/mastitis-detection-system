@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
@@ -7,6 +8,7 @@ from src.models.db_models import Cow, SensorReading, DetectionResult, Alert
 from src.models.schemas import IoTSensorReadingRequest, IoTProcessingResponse
 from src.services.ml_service import ml_service
 
+logger = logging.getLogger("mds.iot_controller")
 EAT_TZ = ZoneInfo("Africa/Nairobi")
 
 
@@ -59,11 +61,18 @@ class IoTController:
             db.flush()  # Flushes to obtain auto-generated reading_id
 
             # 3. ML Inference using exact feature ordering
-            prediction_label, confidence_score = ml_service.predict(
-                temperature=payload.temperature,
-                ph=payload.pH,
-                electrical_conductivity=payload.electrical_conductivity
-            )
+            try:
+                prediction_label, confidence_score = ml_service.predict(
+                    temperature=payload.temperature,
+                    ph=payload.pH,
+                    electrical_conductivity=payload.electrical_conductivity
+                )
+            except RuntimeError as e:
+                logger.error(f"Machine learning inference error: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Machine learning model unavailable: {str(e)}"
+                )
 
             # 4. Insert into Detection_Result table bound to target_cow_id
             detection_result = DetectionResult(
@@ -123,6 +132,8 @@ class IoTController:
 
         except Exception as e:
             db.rollback()
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"IoT telemetry processing and ML inference failed: {str(e)}"

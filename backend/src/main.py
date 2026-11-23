@@ -30,7 +30,10 @@ async def lifespan(app: FastAPI):
     if is_loaded:
         logger.info("Random Forest ML model successfully loaded into shared memory.")
     else:
-        logger.warning("ML model operating in veterinary rule-based heuristic fallback mode.")
+        logger.error(
+            f"Failed to load Random Forest ML model from '{settings.ML_MODEL_PATH}'. "
+            "Inference endpoints will be unavailable until a valid model is loaded."
+        )
 
     yield
 

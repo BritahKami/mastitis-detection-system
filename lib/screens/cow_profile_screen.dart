@@ -199,14 +199,21 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Text(
-                                        'Tag number: ',
-                                        style: AppTypography.h2,
-                                      ),
-                                      Text(
-                                        _cow.rawTagId,
-                                        style: AppTypography.h2.copyWith(
-                                          color: AppColors.primaryTheme,
+                                      Expanded(
+                                        child: Text.rich(
+                                          TextSpan(
+                                            text: 'Tag number: ',
+                                            style: AppTypography.h2,
+                                            children: [
+                                              TextSpan(
+                                                text: _cow.rawTagId,
+                                                style: AppTypography.h2.copyWith(
+                                                  color: AppColors.primaryTheme,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ],
@@ -223,9 +230,12 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
                                           color: AppColors.textPrimary,
                                         ),
                                       ),
-                                      Text(
-                                        _cow.breed,
-                                        style: AppTypography.bodyRegularDark,
+                                      Flexible(
+                                        child: Text(
+                                          _cow.breed,
+                                          style: AppTypography.bodyRegularDark,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -338,77 +348,86 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.calendar_today_outlined,
-                                                    size: 14,
-                                                    color: AppColors.textSecondary,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    timeDisplay,
-                                                    style: const TextStyle(
-                                                      fontFamily: AppTypography.fontFamily,
-                                                      fontSize: 13,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: AppColors.textPrimary,
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: Wrap(
+                                              alignment: WrapAlignment.spaceBetween,
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              spacing: 8.0,
+                                              runSpacing: 6.0,
+                                              children: [
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.calendar_today_outlined,
+                                                      size: 14,
+                                                      color: AppColors.textSecondary,
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  if (record.confidenceScore != null)
-                                                    Container(
-                                                      margin: const EdgeInsets.only(right: 6.0),
-                                                      padding: const EdgeInsets.symmetric(
-                                                        horizontal: 8.0,
-                                                        vertical: 4.0,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: AppColors.backgroundSurface,
-                                                        borderRadius: AppRadii.badgeBorderRadius,
-                                                        border: Border.all(
-                                                          color: AppColors.borderNeutral,
-                                                          width: 1.0,
-                                                        ),
-                                                      ),
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
                                                       child: Text(
-                                                        '${record.confidenceScore!.toStringAsFixed(1)}% conf',
+                                                        timeDisplay,
                                                         style: const TextStyle(
                                                           fontFamily: AppTypography.fontFamily,
-                                                          fontSize: 11,
+                                                          fontSize: 13,
                                                           fontWeight: FontWeight.w600,
                                                           color: AppColors.textPrimary,
                                                         ),
                                                       ),
                                                     ),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(
-                                                      horizontal: 10.0,
-                                                      vertical: 4.0,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: statusBg,
-                                                      borderRadius: AppRadii.badgeBorderRadius,
-                                                    ),
-                                                    child: Text(
-                                                      record.label,
-                                                      style: AppTypography.badgeText.copyWith(
-                                                        color: statusColor,
-                                                        fontSize: 12,
+                                                  ],
+                                                ),
+                                                Wrap(
+                                                  spacing: 6.0,
+                                                  runSpacing: 4.0,
+                                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 10.0,
+                                                        vertical: 4.0,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: statusBg,
+                                                        borderRadius: AppRadii.badgeBorderRadius,
+                                                      ),
+                                                      child: Text(
+                                                        record.label,
+                                                        style: AppTypography.badgeText.copyWith(
+                                                          color: statusColor,
+                                                          fontSize: 12,
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
+                                                    if (record.confidenceScore != null)
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(
+                                                          horizontal: 8.0,
+                                                          vertical: 3.0,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: AppColors.backgroundSurface,
+                                                          borderRadius: AppRadii.badgeBorderRadius,
+                                                          border: Border.all(
+                                                            color: AppColors.borderNeutral,
+                                                            width: 1.0,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          '${record.confidenceScore!.toStringAsFixed(1)}% conf',
+                                                          style: const TextStyle(
+                                                            fontFamily: AppTypography.fontFamily,
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: AppColors.textPrimary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                           if (record.temperature > 0 || record.pH > 0 || record.electricalConductivity > 0) ...[
                                             const SizedBox(height: 8),
@@ -421,37 +440,42 @@ class _CowProfileScreenState extends State<CowProfileScreen> {
                                                 color: AppColors.backgroundSurface,
                                                 borderRadius: BorderRadius.circular(6.0),
                                               ),
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    'Temp: ${record.temperature.toStringAsFixed(1)} °C',
-                                                    style: const TextStyle(
-                                                      fontFamily: AppTypography.fontFamily,
-                                                      fontSize: 12,
-                                                      color: AppColors.textPrimary,
-                                                      fontWeight: FontWeight.w500,
+                                              child: SizedBox(
+                                                width: double.infinity,
+                                                child: Wrap(
+                                                  alignment: WrapAlignment.spaceBetween,
+                                                  spacing: 8.0,
+                                                  runSpacing: 4.0,
+                                                  children: [
+                                                    Text(
+                                                      'Temp: ${record.temperature.toStringAsFixed(1)} °C',
+                                                      style: const TextStyle(
+                                                        fontFamily: AppTypography.fontFamily,
+                                                        fontSize: 12,
+                                                        color: AppColors.textPrimary,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  Text(
-                                                    'pH: ${record.pH.toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      fontFamily: AppTypography.fontFamily,
-                                                      fontSize: 12,
-                                                      color: AppColors.textPrimary,
-                                                      fontWeight: FontWeight.w500,
+                                                    Text(
+                                                      'pH: ${record.pH.toStringAsFixed(2)}',
+                                                      style: const TextStyle(
+                                                        fontFamily: AppTypography.fontFamily,
+                                                        fontSize: 12,
+                                                        color: AppColors.textPrimary,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  Text(
-                                                    'Cond: ${record.electricalConductivity.toStringAsFixed(2)} mS/cm',
-                                                    style: const TextStyle(
-                                                      fontFamily: AppTypography.fontFamily,
-                                                      fontSize: 12,
-                                                      color: AppColors.textPrimary,
-                                                      fontWeight: FontWeight.w500,
+                                                    Text(
+                                                      'Cond: ${record.electricalConductivity.toStringAsFixed(2)} mS/cm',
+                                                      style: const TextStyle(
+                                                        fontFamily: AppTypography.fontFamily,
+                                                        fontSize: 12,
+                                                        color: AppColors.textPrimary,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ],

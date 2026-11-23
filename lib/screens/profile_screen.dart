@@ -19,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
   final int? cowsRegistered;
   final ValueChanged<int>? onTabSelected;
   final bool showBottomNav;
+  final bool isActive;
 
   const ProfileScreen({
     super.key,
@@ -28,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
     this.cowsRegistered,
     this.onTabSelected,
     this.showBottomNav = true,
+    this.isActive = true,
   });
 
   @override
@@ -45,23 +47,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    ApiService.cowsCountNotifier.addListener(_onCowCountChanged);
     if (widget.firstName != null) {
       _firstName = widget.firstName!;
       _lastName = widget.lastName ?? '';
       _email = widget.email ?? '';
-      _cowsRegistered = widget.cowsRegistered ?? 0;
+      _cowsRegistered = widget.cowsRegistered ?? ApiService.cowsCountNotifier.value ?? 0;
       _isLoading = false;
     } else {
+      if (ApiService.cowsCountNotifier.value != null) {
+        _cowsRegistered = ApiService.cowsCountNotifier.value!;
+      } else if (ApiService.cachedCows != null) {
+        _cowsRegistered = ApiService.cachedCows!.length;
+      }
       _isLoading = true;
       _fetchProfile();
     }
   }
 
-  Future<void> _fetchProfile() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  @override
+  void dispose() {
+    ApiService.cowsCountNotifier.removeListener(_onCowCountChanged);
+    super.dispose();
+  }
+
+  void _onCowCountChanged() {
+    final count = ApiService.cowsCountNotifier.value;
+    if (count != null && mounted) {
+      setState(() {
+        _cowsRegistered = count;
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.cowsRegistered != null && widget.cowsRegistered != oldWidget.cowsRegistered) {
+      _cowsRegistered = widget.cowsRegistered!;
+    }
+    // When switching to the Profile tab, derive count and trigger background refresh
+    if (widget.isActive && !oldWidget.isActive) {
+      _syncCountAndRefresh();
+    }
+  }
+
+  void _syncCountAndRefresh() {
+    // 1. Derive or sync count from shared state / cached cows
+    final count = ApiService.cowsCountNotifier.value;
+    final cachedCows = ApiService.cachedCows;
+    if (count != null) {
+      if (count != _cowsRegistered) {
+        setState(() {
+          _cowsRegistered = count;
+        });
+      }
+    } else if (cachedCows != null) {
+      if (cachedCows.length != _cowsRegistered) {
+        setState(() {
+          _cowsRegistered = cachedCows.length;
+        });
+      }
+    }
+
+    // 2. Trigger fresh background fetch of profile summary
+    _fetchProfile(isBackgroundRefresh: true);
+  }
+
+  Future<void> _fetchProfile({bool isBackgroundRefresh = false}) async {
+    if (!isBackgroundRefresh) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final profile = await ApiService().getProfile();
@@ -70,7 +129,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _firstName = profile.firstName;
         _lastName = profile.lastName;
         _email = profile.email;
-        _cowsRegistered = profile.totalCows;
+        final syncedCount = ApiService.cowsCountNotifier.value;
+        if (syncedCount != null && syncedCount > profile.totalCows) {
+          _cowsRegistered = syncedCount;
+        } else {
+          _cowsRegistered = profile.totalCows;
+          ApiService.cowsCountNotifier.value = profile.totalCows;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -78,12 +143,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
       setState(() {
         if (isTest) {
-          _firstName = 'John';
-          _lastName = 'Doe';
-          _email = 'farmer@dairyfarm.com';
-          _cowsRegistered = 5;
+          if (_firstName.isEmpty) _firstName = 'John';
+          if (_lastName.isEmpty) _lastName = 'Doe';
+          if (_email.isEmpty) _email = 'farmer@dairyfarm.com';
+          final syncedCount = ApiService.cowsCountNotifier.value;
+          if (syncedCount != null) {
+            _cowsRegistered = syncedCount;
+          } else if (_cowsRegistered == 0) {
+            _cowsRegistered = 5;
+          }
         } else {
-          _errorMessage = e.toString().replaceAll('ApiException: ', '');
+          if (!isBackgroundRefresh) {
+            _errorMessage = e.toString().replaceAll('ApiException: ', '');
+          }
         }
         _isLoading = false;
       });

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
@@ -12,6 +13,30 @@ class ApiService {
   ApiService._internal();
 
   http.Client _client = http.Client();
+
+  /// Global notifier for registered cows count so all screens (Dashboard, Profile)
+  /// stay immediately synchronized without manual reload or re-login.
+  static final ValueNotifier<int?> cowsCountNotifier = ValueNotifier<int?>(null);
+
+  /// In-memory cache of loaded cows for instant retrieval across screens
+  static List<Cow>? cachedCows;
+
+  /// Updates the shared/app-level registered cow count and notifies listeners.
+  void updateCowCount(int count) {
+    cowsCountNotifier.value = count;
+  }
+
+  /// Increments the shared/app-level registered cow count.
+  void incrementCowCount() {
+    final current = cowsCountNotifier.value ?? cachedCows?.length ?? 0;
+    cowsCountNotifier.value = current + 1;
+  }
+
+  /// Helper for testing to reset state
+  static void resetStateForTesting() {
+    cowsCountNotifier.value = null;
+    cachedCows = null;
+  }
 
   // Test helper to allow injecting mock HTTP client during tests if needed
   void setClientForTesting(http.Client client) {
@@ -39,6 +64,8 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(ApiConstants.authTokenKey);
     await prefs.remove(ApiConstants.authUserEmailKey);
+    cowsCountNotifier.value = null;
+    cachedCows = null;
   }
 
   /// Checks if a valid auth token is present
@@ -319,7 +346,11 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return FarmerProfile.fromJson(data);
+        final profile = FarmerProfile.fromJson(data);
+        if (cowsCountNotifier.value == null || cowsCountNotifier.value! < profile.totalCows) {
+          cowsCountNotifier.value = profile.totalCows;
+        }
+        return profile;
       } else if (response.statusCode == 401) {
         await clearAuth();
         throw const ApiException('Session expired. Please log in again.');
@@ -381,8 +412,13 @@ class ApiService {
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
         if (decoded is List) {
-          return decoded.map((item) => Cow.fromJson(item as Map<String, dynamic>)).toList();
+          final cows = decoded.map((item) => Cow.fromJson(item as Map<String, dynamic>)).toList();
+          cachedCows = cows;
+          cowsCountNotifier.value = cows.length;
+          return cows;
         }
+        cachedCows = [];
+        cowsCountNotifier.value = 0;
         return [];
       } else if (response.statusCode == 401) {
         await clearAuth();
@@ -426,7 +462,15 @@ class ApiService {
       final data = _parseResponseBody(response);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return Cow.fromJson(data);
+        final newCow = Cow.fromJson(data);
+        if (cachedCows != null) {
+          cachedCows!.removeWhere((c) => c.id == newCow.id || c.tagNumber.toLowerCase() == newCow.tagNumber.toLowerCase());
+          cachedCows!.insert(0, newCow);
+          cowsCountNotifier.value = cachedCows!.length;
+        } else {
+          incrementCowCount();
+        }
+        return newCow;
       } else if (response.statusCode == 401) {
         await clearAuth();
         throw const ApiException('Session expired. Please log in again.');

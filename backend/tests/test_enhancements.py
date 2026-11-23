@@ -9,7 +9,8 @@ from src.models.schemas import CowRegisterRequest, IoTSensorReadingRequest
 from src.controllers.cow_controller import CowController
 from src.controllers.iot_controller import IoTController
 from src.controllers.test_controller import TestController
-from src.services.ml_service import ml_service
+from fastapi import HTTPException
+from src.services.ml_service import ml_service, MastitisMLService
 from src.services.session_service import session_manager
 
 
@@ -63,6 +64,86 @@ class TestMDSEnhancements(unittest.TestCase):
         self.assertLessEqual(confidence, 100.0)
         self.assertEqual(res.confidence_score, confidence)
         self.assertEqual(res.prediction, label)
+
+    def test_pure_random_forest_classification_and_probabilities(self):
+        """
+        Verify that healthy and mastitic telemetry classifications are derived
+        purely from the loaded Random Forest model and predict_proba probabilities.
+        """
+        # Healthy milk sample
+        healthy_res = ml_service.predict(
+            temperature=38.6,
+            ph=6.60,
+            electrical_conductivity=4.80
+        )
+        self.assertEqual(healthy_res.prediction, "Mastitis Absent")
+        self.assertGreaterEqual(healthy_res.confidence_score, 50.0)
+        self.assertLessEqual(healthy_res.confidence_score, 100.0)
+
+        # Mastitic milk sample
+        mastitic_res = ml_service.predict(
+            temperature=40.5,
+            ph=7.10,
+            electrical_conductivity=6.90
+        )
+        self.assertEqual(mastitic_res.prediction, "Mastitis Present")
+        self.assertGreaterEqual(mastitic_res.confidence_score, 50.0)
+        self.assertLessEqual(mastitic_res.confidence_score, 100.0)
+
+    def test_predict_raises_runtime_error_when_model_unavailable(self):
+        """
+        Verify that ml_service explicitly raises a RuntimeError when no model is loaded,
+        without falling back to veterinary threshold rules.
+        """
+        unloaded_service = MastitisMLService(model_path="non_existent_model.joblib")
+        with self.assertRaises(RuntimeError) as cm:
+            unloaded_service.predict(
+                temperature=40.5,
+                ph=7.10,
+                electrical_conductivity=6.90
+            )
+        self.assertIn("unavailable", str(cm.exception).lower())
+
+    def test_iot_controller_raises_503_when_model_unavailable(self):
+        """
+        Verify that IoTController raises HTTP 503 when the ML model is unavailable,
+        rather than substituting rule-based heuristics.
+        """
+        cow = Cow(
+            farmer_id=self.farmer.farmer_id,
+            cow_tag="COW-ERR",
+            breed="Friesian",
+            age=3,
+            health_status="Pending"
+        )
+        self.db.add(cow)
+        self.db.commit()
+        self.db.refresh(cow)
+
+        payload = IoTSensorReadingRequest(
+            cow_id=cow.cow_id,
+            temperature=39.4,
+            pH=6.85,
+            electrical_conductivity=6.42
+        )
+
+        original_loaded = ml_service._is_loaded
+        original_model = ml_service.model
+        try:
+            ml_service._is_loaded = False
+            ml_service.model = None
+
+            with self.assertRaises(HTTPException) as cm:
+                IoTController.process_sensor_reading(
+                    payload=payload,
+                    db=self.db,
+                    active_cow_id=cow.cow_id
+                )
+            self.assertEqual(cm.exception.status_code, 503)
+            self.assertIn("unavailable", cm.exception.detail.lower())
+        finally:
+            ml_service._is_loaded = original_loaded
+            ml_service.model = original_model
 
     def test_iot_telemetry_stores_and_returns_confidence_score(self):
         """

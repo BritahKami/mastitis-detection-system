@@ -55,22 +55,30 @@ class CustomPrimaryButton extends StatelessWidget {
                       ),
                     ),
                   )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (leadingIcon != null) ...[
-                        leadingIcon!,
-                        const SizedBox(width: 8),
-                      ],
-                      Text(
-                        label,
-                        style: AppTypography.buttonText.copyWith(
-                          color: isSecondary
-                              ? AppColors.primaryTheme
-                              : Colors.white,
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (leadingIcon != null) ...[
+                          leadingIcon!,
+                          const SizedBox(width: 8),
+                        ],
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.buttonText.copyWith(
+                              color: isSecondary
+                                  ? AppColors.primaryTheme
+                                  : Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
           ),
         ),

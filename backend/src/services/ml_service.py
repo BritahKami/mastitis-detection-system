@@ -49,11 +49,12 @@ class MastitisMLService:
         Extracts the estimator from dictionary artifact if pickled as a dict.
         """
         if not os.path.exists(self.model_path):
-            logger.warning(
+            logger.error(
                 f"Model file not found at '{self.model_path}'. "
-                f"ML service will operate in validated veterinary heuristic fallback mode."
+                "Random Forest model is required for inference."
             )
             self._is_loaded = False
+            self.model = None
             return False
 
         try:
@@ -65,18 +66,26 @@ class MastitisMLService:
             else:
                 self.model = artifact
 
-            if self.model is not None and hasattr(self.model, "predict"):
+            if (
+                self.model is not None
+                and hasattr(self.model, "predict")
+                and hasattr(self.model, "predict_proba")
+            ):
                 self._is_loaded = True
                 logger.info(f"Successfully loaded Random Forest model from '{self.model_path}'")
                 return True
             else:
-                logger.error(f"No estimator with '.predict()' found in '{self.model_path}'")
+                logger.error(
+                    f"Model in '{self.model_path}' is invalid: must have '.predict()' and '.predict_proba()'"
+                )
                 self._is_loaded = False
+                self.model = None
                 return False
 
         except Exception as e:
             logger.error(f"Failed to deserialize ML model from '{self.model_path}': {str(e)}")
             self._is_loaded = False
+            self.model = None
             return False
 
     def predict(
@@ -86,49 +95,52 @@ class MastitisMLService:
         electrical_conductivity: float
     ) -> PredictionResult:
         """
-        Executes prediction using the exact 3-feature order:
+        Executes prediction exclusively using the loaded Random Forest model.
+        Features follow the exact 3-feature order:
         [Milk_Temperature, Milk_pH, Milk_Conductivity]
 
-        Computes class probabilities via `self.model.predict_proba(features)[0]`.
-        Class 0 = 'Mastitis Absent', Class 1 = 'Mastitis Present'.
-        Confidence score is the winning class probability percentage rounded to 1 decimal place.
+        Classification and confidence score are derived strictly from the Random Forest model:
+        - Classification ('Mastitis Present' or 'Mastitis Absent') is determined by the winning class.
+        - Confidence score is computed exclusively from the model's class probability (predict_proba)
+          for the winning class, scaled to a percentage (0.0 - 100.0) rounded to 1 decimal place.
 
-        Returns:
-            PredictionResult: behaves as string ('Mastitis Present' or 'Mastitis Absent')
-            and unpacks as (pred_class_label, confidence_score).
+        Raises:
+            RuntimeError: If the model is not loaded, unavailable, or does not support predict_proba.
         """
-        if self._is_loaded and self.model is not None:
-            try:
-                features = pd.DataFrame(
-                    [{
-                        "Milk_Temperature": float(temperature),
-                        "Milk_pH": float(ph),
-                        "Milk_Conductivity": float(electrical_conductivity)
-                    }]
-                )
+        if not self._is_loaded or self.model is None:
+            raise RuntimeError(
+                f"Random Forest model is unavailable at '{self.model_path}'. "
+                "Prediction cannot be performed without the loaded model."
+            )
 
-                if hasattr(self.model, "predict_proba"):
-                    probs = self.model.predict_proba(features)[0]  # [prob_healthy, prob_mastitis]
-                    pred_class = int(probs[1] >= 0.5)
-                    prediction_label = "Mastitis Present" if pred_class == 1 else "Mastitis Absent"
-                    confidence_score = round(float(probs[pred_class]) * 100.0, 1)
-                else:
-                    raw_pred = self.model.predict(features)[0]
-                    pred_class = int(raw_pred)
-                    prediction_label = "Mastitis Present" if pred_class == 1 else "Mastitis Absent"
-                    confidence_score = 90.0
+        features = pd.DataFrame(
+            [{
+                "Milk_Temperature": float(temperature),
+                "Milk_pH": float(ph),
+                "Milk_Conductivity": float(electrical_conductivity)
+            }]
+        )
 
-                return PredictionResult(prediction_label, confidence_score)
+        if not hasattr(self.model, "predict_proba"):
+            raise RuntimeError(
+                "Loaded Random Forest model does not support 'predict_proba'. "
+                "Confidence score must be derived strictly from model class probabilities."
+            )
 
-            except Exception as e:
-                logger.error(f"In-memory model inference error: {str(e)}. Falling back to veterinary threshold.")
+        # Pure Random Forest prediction and probability inference
+        probs = self.model.predict_proba(features)[0]  # [prob_class_0, prob_class_1]
+        classes = getattr(self.model, "classes_", [0, 1])
 
-        # Veterinary Rule-Based Fallback:
-        # Normal bovine milk: Temperature ~ 38.5-39.0°C, pH ~ 6.5-6.7, Conductivity ~ 4.0-5.5 mS/cm.
-        # Mastitis manifests as: Elevated temp (>= 39.2°C), alkaline pH (>= 6.8), or elevated conductivity (>= 6.0 mS/cm).
-        if temperature >= 39.2 or ph >= 6.8 or electrical_conductivity >= 6.0:
-            return PredictionResult("Mastitis Present", 85.0)
-        return PredictionResult("Mastitis Absent", 85.0)
+        raw_pred = self.model.predict(features)[0]
+        winning_class = int(raw_pred)
+
+        winning_idx = list(classes).index(winning_class)
+        winning_prob = float(probs[winning_idx])
+
+        prediction_label = "Mastitis Present" if winning_class == 1 else "Mastitis Absent"
+        confidence_score = round(winning_prob * 100.0, 1)
+
+        return PredictionResult(prediction_label, confidence_score)
 
 
 # Global singleton instance

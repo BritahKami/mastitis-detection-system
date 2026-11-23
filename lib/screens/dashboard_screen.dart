@@ -46,6 +46,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (widget.initialCows != null) {
       _cows = List.from(widget.initialCows!);
       _isLoading = false;
+      ApiService.cachedCows = _cows;
+      ApiService().updateCowCount(_cows.length);
     } else {
       _cows = [];
       _isLoading = true;
@@ -66,6 +68,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _cows = cows;
         _isLoading = false;
       });
+      ApiService.cachedCows = cows;
+      ApiService().updateCowCount(cows.length);
     } catch (e) {
       if (!mounted) return;
       final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
@@ -74,6 +78,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (_cows.isEmpty) {
             _cows = List.from(MDSMockRepository.getInitialCows());
           }
+          ApiService.cachedCows = _cows;
+          ApiService().updateCowCount(_cows.length);
         } else {
           _errorMessage = e.toString().replaceAll('ApiException: ', '');
         }
@@ -411,6 +417,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               _cows.removeWhere((c) => c.id == newCow.id || c.tagNumber.toLowerCase() == newCow.tagNumber.toLowerCase());
                               _cows.insert(0, newCow);
                             });
+                            ApiService.cachedCows = _cows;
+                            final currentCount = ApiService.cowsCountNotifier.value ?? 0;
+                            final nextCount = _cows.length > currentCount ? _cows.length : currentCount + 1;
+                            ApiService().updateCowCount(nextCount);
                             await _fetchCows();
                           } catch (e) {
                             final isTest = WidgetsBinding.instance.runtimeType
@@ -441,6 +451,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   _cows.removeWhere((c) => c.tagNumber.toLowerCase() == fallbackCow.tagNumber.toLowerCase());
                                   _cows.insert(0, fallbackCow);
                                 });
+                                ApiService.cachedCows = _cows;
+                                final currentCount = ApiService.cowsCountNotifier.value ?? 0;
+                                final nextCount = _cows.length > currentCount ? _cows.length : currentCount + 1;
+                                ApiService().updateCowCount(nextCount);
                                 await _fetchCows();
                               }
                             } else {

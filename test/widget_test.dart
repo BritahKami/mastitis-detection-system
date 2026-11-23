@@ -8,7 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mastitis_detection_app/constants/theme_constants.dart';
 import 'package:mastitis_detection_app/main.dart';
 import 'package:mastitis_detection_app/models/mds_models.dart';
+import 'package:mastitis_detection_app/screens/cow_profile_screen.dart';
 import 'package:mastitis_detection_app/screens/dashboard_screen.dart';
+import 'package:mastitis_detection_app/screens/detection_result_screen.dart';
+import 'package:mastitis_detection_app/screens/main_shell_screen.dart';
 import 'package:mastitis_detection_app/screens/profile_screen.dart';
 import 'package:mastitis_detection_app/screens/register_screen.dart';
 import 'package:mastitis_detection_app/services/api_service.dart';
@@ -21,6 +24,7 @@ import 'package:mastitis_detection_app/widgets/status_badge.dart';
 
 void main() {
   setUp(() {
+    ApiService.resetStateForTesting();
     SharedPreferences.setMockInitialValues({
       'mds_auth_token': 'test_token',
       'mds_auth_user_email': 'farmer@dairyfarm.com',
@@ -181,7 +185,7 @@ void main() {
             'fname': 'John',
             'lname': 'Doe',
             'email': 'farmer@dairyfarm.com',
-            'total_cows': 5,
+            'total_cows': mockCows.length,
           }),
           200,
           headers: {'content-type': 'application/json'},
@@ -219,6 +223,29 @@ void main() {
       }
 
       if (path.contains('/api/cows/') && method == 'GET') {
+        if (path.endsWith('/12')) {
+          return http.Response(
+            jsonEncode({
+              'cow_id': 12,
+              'cow_tag': 'COW-012',
+              'breed': 'Holstein Friesian',
+              'age': 4,
+              'health_status': 'Healthy',
+              'lastTested': 'Today',
+              'history': [
+                {
+                  'date': '2026-11-21',
+                  'reading_time': '2026-11-21T16:42:00',
+                  'confidence_score': 100.0,
+                  'prediction': 'Mastitis Absent',
+                  'mastitisPresent': false,
+                }
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         return http.Response(
           jsonEncode({
             'cow_id': 102,
@@ -1123,6 +1150,156 @@ Future<void> performLoginFlow(WidgetTester tester) async {
         ),
         findsWidgets,
       );
+    });
+
+    testWidgets(
+        'Register Cow modal immediately updates registered cow count and syncs on Profile tab switch',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MainShellScreen(initialIndex: 0),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Profile tab first to see initial count (mockCows has 2 cows)
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cows Registered'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+
+      // Switch back to Dashboard tab (index 0)
+      await tester.tap(find.text('Dash'));
+      await tester.pumpAndSettle();
+
+      // Open Add Cow modal
+      await tester.tap(find.text('+ Add cow'));
+      await tester.pumpAndSettle();
+
+      // Select Breed 'Jersey'
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jersey').last);
+      await tester.pumpAndSettle();
+
+      // Select Age '4 years'
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4 years').last);
+      await tester.pumpAndSettle();
+
+      // Save Cow
+      await tester.tap(find.text('Save Cow'));
+      await tester.pumpAndSettle();
+
+      // Ensure modal is dismissed
+      expect(find.text('Register Cow'), findsNothing);
+
+      // Verify shared state was immediately updated to 3
+      expect(ApiService.cowsCountNotifier.value, 3);
+
+      // Switch to Profile tab
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+
+      // Cows Registered is immediately 3
+      expect(find.text('Cows Registered'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+    });
+  });
+
+  group('Responsive Layout Overflow Prevention Tests', () {
+    testWidgets(
+        'DetectionResultScreen Model Confidence header does not overflow on 360x640 and 320x640',
+        (tester) async {
+      for (final width in [360.0, 320.0]) {
+        tester.view.physicalSize = Size(width, 640.0);
+        tester.view.devicePixelRatio = 1.0;
+
+        FlutterErrorDetails? caughtDetails;
+        final originalOnError = FlutterError.onError;
+        FlutterError.onError = (details) {
+          caughtDetails = details;
+        };
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: DetectionResultScreen(
+              result: DetectionResult(
+                tagNumber: 'COW-012',
+                timestamp: '2026-11-21 16:42',
+                temperature: 38.6,
+                pH: 6.6,
+                conductivity: 5.8,
+                status: StatusType.healthy,
+                predictionLabel: 'Mastitis Absent',
+                confidenceScore: 100.0,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        FlutterError.onError = originalOnError;
+
+        expect(caughtDetails, isNull,
+            reason: 'RenderFlex overflow occurred on width $width');
+        expect(find.text('Model Confidence: 100.0%'), findsOneWidget);
+        expect(find.text('High Certainty'), findsOneWidget);
+      }
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    testWidgets(
+        'CowProfileScreen history item header does not overflow on 360x640 and 320x640',
+        (tester) async {
+      for (final width in [360.0, 320.0]) {
+        tester.view.physicalSize = Size(width, 640.0);
+        tester.view.devicePixelRatio = 1.0;
+
+        FlutterErrorDetails? caughtDetails;
+        final originalOnError = FlutterError.onError;
+        FlutterError.onError = (details) {
+          caughtDetails = details;
+        };
+
+        final testCow = Cow(
+          id: '12',
+          tagNumber: 'COW-012',
+          breed: 'Holstein Friesian',
+          age: 4,
+          status: StatusType.healthy,
+          lastTested: 'Today',
+          history: const [
+            TestHistoryRecord(
+              date: '2026-11-21',
+              formattedTime: '16:42',
+              mastitisPresent: false,
+              confidenceScore: 100.0,
+              temperature: 38.5,
+              pH: 6.6,
+              electricalConductivity: 5.5,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CowProfileScreen(cow: testCow),
+          ),
+        );
+        await tester.pumpAndSettle();
+        FlutterError.onError = originalOnError;
+
+        expect(caughtDetails, isNull,
+            reason: 'RenderFlex overflow occurred on width $width');
+        expect(find.text('2026-11-21  16:42'), findsOneWidget);
+        expect(find.text('100.0% conf'), findsOneWidget);
+        expect(find.text('Mastitis absent'), findsOneWidget);
+      }
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
     });
   });
 }
